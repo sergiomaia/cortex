@@ -37,6 +37,7 @@ TEST_SRCS := tests/test_runner.c \
              tests/action/test_action_health.c \
              tests/action/test_action_incidents.c \
              tests/action/test_action_ai_incident_summary.c \
+             tests/action/test_action_ai_rag.c \
              tests/cache/test_cache_memory.c \
              tests/guard/test_guard.c \
              tests/forge/test_forge_generators.c \

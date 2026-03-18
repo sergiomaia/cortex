@@ -55,6 +55,7 @@ void test_action_controller_render_json_and_text(void);
 void test_action_health_endpoint_flow(void);
 void test_action_incidents_show_integration(void);
 void test_action_ai_incident_summary_endpoint(void);
+void test_action_ai_rag_endpoint(void);
 void test_llm_integration_validates_prompt_and_response(void);
 void test_llm_integration_handles_missing_variables_as_empty(void);
 
@@ -236,6 +237,7 @@ static void run_all_tests(void) {
     test_action_health_endpoint_flow();
     test_action_incidents_show_integration();
     test_action_ai_incident_summary_endpoint();
+    test_action_ai_rag_endpoint();
     test_action_router_add_and_match_literal();
     test_action_router_match_with_param();
     test_action_dispatch_success_and_not_found();
