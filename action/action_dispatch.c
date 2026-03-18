@@ -7,6 +7,8 @@
 
 #include "action_dispatch.h"
 #include "action_response.h"
+#include "action_router.h"
+#include "action_middleware.h"
 
 int action_dispatch(ActionRouter *router, ActionRequest *req, ActionResponse *res) {
     ActionHandler handler;
@@ -18,7 +20,7 @@ int action_dispatch(ActionRouter *router, ActionRequest *req, ActionResponse *re
         action_response_set(res, 404, "Not Found");
         return -1;
     }
-    handler(req, res);
+    action_middleware_dispatch(handler, req, res);
     return 0;
 }
 
