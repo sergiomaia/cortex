@@ -1,8 +1,8 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
-
 #include "neural_runtime.h"
+#include "pulse_trace.h"
 
 static uint64_t hash_prompt_djb2(const char *s) {
     /* Deterministic djb2-like hash for prompt strings. */
@@ -34,6 +34,7 @@ NeuralRuntime neural_runtime_init(const char *model_name) {
     rt.cache.entries = NULL;
     rt.cache.capacity = 0;
     rt.compute_calls = 0;
+    rt.pulse_ai = NULL;
     return rt;
 }
 
@@ -54,22 +55,39 @@ NeuralRuntime neural_runtime_init_cached(const char *model_name,
     }
 
     rt.cache_enabled = ok ? 1 : 0;
+    rt.pulse_ai = NULL;
     return rt;
+}
+
+void neural_runtime_set_pulse_ai(NeuralRuntime *rt, PulseAI *ai) {
+    if (!rt) {
+        return;
+    }
+    rt->pulse_ai = ai;
 }
 
 const char *neural_run(NeuralRuntime *rt, const char *prompt) {
     char key[64];
     const char *cached;
     const char *resp;
+    PulseTrace trace;
+    double latency_ms;
 
     if (!rt || !prompt) {
         return NULL;
     }
 
+    /* Trace must wrap the actual model execution / cache hit handling. */
+    pulse_trace_start(&trace);
     if (rt->cache_enabled) {
         prompt_cache_key(prompt, key, sizeof(key));
         cached = (const char *)cache_get(&rt->cache, key);
         if (cached) {
+            pulse_trace_stop(&trace);
+            latency_ms = pulse_trace_elapsed_ms(&trace);
+            if (rt->pulse_ai) {
+                (void)pulse_ai_observe(rt->pulse_ai, rt->model.name, prompt, cached, latency_ms);
+            }
             return cached;
         }
     }
@@ -82,6 +100,12 @@ const char *neural_run(NeuralRuntime *rt, const char *prompt) {
         (void)prompt_cache_key(prompt, key, sizeof(key));
         /* Store pointer value without taking ownership. */
         (void)cache_set(&rt->cache, key, (void *)resp, 0);
+    }
+
+    pulse_trace_stop(&trace);
+    latency_ms = pulse_trace_elapsed_ms(&trace);
+    if (rt->pulse_ai) {
+        (void)pulse_ai_observe(rt->pulse_ai, rt->model.name, prompt, resp, latency_ms);
     }
 
     return resp;
