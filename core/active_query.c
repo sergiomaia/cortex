@@ -39,24 +39,30 @@ static int matches_where(ActiveQuery *query, ActiveModel *model) {
     if (!query->has_where || !query->where_field) {
         return 1;
     }
+    if (!query->where_value) {
+        return 0;
+    }
 
     /* Basic equality-based filtering on known fields. */
     if (strcmp(query->where_field, "name") == 0) {
-        if (!model->name || !query->where_value) {
+        if (!model->name) {
             return 0;
         }
         return strcmp(model->name, query->where_value) == 0;
     }
 
     if (strcmp(query->where_field, "id") == 0) {
-        if (!query->where_value) {
-            return 0;
-        }
         return model->id == atoi(query->where_value);
     }
 
-    /* Unknown field: treat as non-match. */
-    return 0;
+    /* Generic key/value lookup via ActiveModel fields. */
+    {
+        const char *field_value = active_model_get_field(model, query->where_field);
+        if (!field_value) {
+            return 0;
+        }
+        return strcmp(field_value, query->where_value) == 0;
+    }
 }
 
 ActiveModel **active_query_execute(ActiveQuery *query, int *out_count) {
@@ -75,18 +81,19 @@ ActiveModel **active_query_execute(ActiveQuery *query, int *out_count) {
     }
 
     store = query->store;
-    if (store->count <= 0) {
-        return NULL;
-    }
-
-    results = (ActiveModel **)malloc(sizeof(ActiveModel *) * store->count);
-    if (!results) {
-        return NULL;
-    }
 
     effective_limit = store->count;
     if (query->limit > 0 && query->limit < effective_limit) {
         effective_limit = query->limit;
+    }
+
+    /* Always return an allocated array to satisfy "return list of models". */
+    {
+        int alloc_size = (effective_limit > 0) ? effective_limit : 1;
+        results = (ActiveModel **)malloc(sizeof(ActiveModel *) * (size_t)alloc_size);
+    }
+    if (!results) {
+        return NULL;
     }
 
     for (i = 0; i < store->count && matched < effective_limit; ++i) {
@@ -98,11 +105,6 @@ ActiveModel **active_query_execute(ActiveQuery *query, int *out_count) {
 
     if (out_count) {
         *out_count = matched;
-    }
-
-    if (matched == 0) {
-        free(results);
-        return NULL;
     }
 
     return results;
