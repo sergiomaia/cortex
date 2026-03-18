@@ -9,6 +9,10 @@
 #include "../action/action_dispatch.h"
 #include "test_assert.h"
 
+/* Guard */
+#include "../guard/guard_session.h"
+#include "../guard/guard_auth.h"
+
 /* Prototypes for tests defined in tests/core/*.c, tests/action/*.c, tests/cache/*.c */
 void test_core_app_init_does_not_crash(void);
 void test_core_logger_outputs_messages(void);
@@ -56,6 +60,9 @@ void test_flow_queue_maintains_execution_order(void);
 void test_cache_memory_set_and_get_key(void);
 void test_cache_memory_overwrite_value(void);
 void test_cache_memory_optional_expiration(void);
+
+void test_guard_session_create_and_validate(void);
+void test_guard_auth_basic_success_and_failure(void);
 
 int test_count = 0;
 int test_failures = 0;
@@ -219,6 +226,9 @@ static void run_all_tests(void) {
     test_cache_memory_set_and_get_key();
     test_cache_memory_overwrite_value();
     test_cache_memory_optional_expiration();
+
+    test_guard_session_create_and_validate();
+    test_guard_auth_basic_success_and_failure();
 }
 
 int main(void) {
