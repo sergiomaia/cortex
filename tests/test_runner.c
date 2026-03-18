@@ -28,6 +28,7 @@ void test_active_record_delete_and_data_consistency(void);
 void test_active_query_where_filters_by_name(void);
 void test_active_query_limit_caps_results(void);
 void test_active_query_where_and_limit_chaining(void);
+void test_active_relations_incident_has_many_logs(void);
 void test_action_request_parse_simple_get(void);
 void test_action_response_set_formats_fields(void);
 void test_action_router_register_and_match_literal_route(void);
@@ -173,6 +174,7 @@ static void run_all_tests(void) {
     test_active_query_where_filters_by_name();
     test_active_query_limit_caps_results();
     test_active_query_where_and_limit_chaining();
+    test_active_relations_incident_has_many_logs();
     test_action_request_parse_simple_get();
     test_action_response_set_formats_fields();
     test_action_router_register_and_match_literal_route();
