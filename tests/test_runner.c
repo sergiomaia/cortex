@@ -19,6 +19,8 @@ void test_core_logger_outputs_messages(void);
 void test_core_config_loads_environment_variables(void);
 void test_neural_runtime_run_returns_response(void);
 void test_neural_runtime_model_name_and_prompt_usage(void);
+void test_neural_runtime_cache_returns_cached_response_for_same_prompt(void);
+void test_neural_runtime_cache_hit_avoids_recomputation(void);
 void test_neural_prompt_replaces_variables(void);
 void test_neural_prompt_handles_missing_variables(void);
 void test_incident_summary_builds_prompt_and_returns_response(void);
@@ -196,6 +198,8 @@ static void run_all_tests(void) {
     test_core_config_loads_environment_variables();
     test_neural_runtime_run_returns_response();
     test_neural_runtime_model_name_and_prompt_usage();
+    test_neural_runtime_cache_returns_cached_response_for_same_prompt();
+    test_neural_runtime_cache_hit_avoids_recomputation();
     test_neural_prompt_replaces_variables();
     test_neural_prompt_handles_missing_variables();
     test_incident_summary_builds_prompt_and_returns_response();
