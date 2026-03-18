@@ -7,7 +7,8 @@ FLOW_SRCS := $(wildcard flow/*.c)
 CACHE_SRCS := $(wildcard cache/*.c)
 GUARD_SRCS := $(wildcard guard/*.c)
 FORGE_SRCS := $(wildcard forge/*.c)
-SRCS := $(CORE_SRCS) $(ACTION_SRCS) $(FLOW_SRCS) $(CACHE_SRCS) $(GUARD_SRCS) $(FORGE_SRCS)
+CLI_SRCS := $(wildcard cli/*.c)
+SRCS := $(CORE_SRCS) $(ACTION_SRCS) $(FLOW_SRCS) $(CACHE_SRCS) $(GUARD_SRCS) $(FORGE_SRCS) $(CLI_SRCS)
 OBJS := $(SRCS:.c=.o)
 
 TEST_SRCS := tests/test_runner.c \
@@ -20,6 +21,7 @@ TEST_SRCS := tests/test_runner.c \
              tests/core/test_incident_summary.c \
              tests/core/test_neural_memory.c \
              tests/core/test_pulse_log.c \
+             tests/core/test_pulse_metrics.c \
              tests/core/test_neural_stream.c \
              tests/core/test_neural_embedding.c \
              tests/core/test_neural_retrieval.c \
@@ -37,7 +39,8 @@ TEST_SRCS := tests/test_runner.c \
              tests/action/test_action_ai_incident_summary.c \
              tests/cache/test_cache_memory.c \
              tests/guard/test_guard.c \
-             tests/forge/test_forge_generators.c
+             tests/forge/test_forge_generators.c \
+             tests/cli/test_cli.c
 TEST_BIN := tests/test_runner
 
 LIB := libcortex.a
