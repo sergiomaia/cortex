@@ -9,6 +9,9 @@ typedef enum {
 typedef struct {
     PulseLogKind kind;
     const char *message;
+    /* AI observability fields (optional; only set for AI entries). */
+    const char *model_name;
+    double latency_ms;
     const char *prompt;
     const char *response;
 } PulseLogEntry;
@@ -29,6 +32,13 @@ int pulse_log_append(PulseLog *log, const char *message);
  * Both prompt and response must be non-NULL.
  * Returns 0 on success, -1 on failure. */
 int pulse_log_ai(PulseLog *log, const char *prompt, const char *response);
+
+/* Append a structured AI observability log entry. */
+int pulse_log_ai_observe(PulseLog *log,
+                          const char *model_name,
+                          const char *prompt,
+                          const char *response,
+                          double latency_ms);
 
 #endif /* PULSE_LOG_H */
 

@@ -3,6 +3,12 @@
 
 #include "pulse_log.h"
 
+int pulse_log_ai_observe(PulseLog *log,
+                          const char *model_name,
+                          const char *prompt,
+                          const char *response,
+                          double latency_ms);
+
 static char *dup_string(const char *s) {
     size_t n;
     char *out;
@@ -44,6 +50,8 @@ static int ensure_capacity(PulseLog *log) {
     for (i = log->capacity; i < new_capacity; ++i) {
         new_entries[i].kind = PULSE_LOG_KIND_GENERIC;
         new_entries[i].message = NULL;
+        new_entries[i].model_name = NULL;
+        new_entries[i].latency_ms = 0.0;
         new_entries[i].prompt = NULL;
         new_entries[i].response = NULL;
     }
@@ -69,9 +77,14 @@ void pulse_log_free(PulseLog *log) {
     }
     for (i = 0; i < log->count; ++i) {
         free((void *)log->entries[i].message);
+        /* model_name is not owned by the log */
+        log->entries[i].model_name = NULL;
+        log->entries[i].latency_ms = 0.0;
         free((void *)log->entries[i].prompt);
         free((void *)log->entries[i].response);
         log->entries[i].message = NULL;
+        log->entries[i].model_name = NULL;
+        log->entries[i].latency_ms = 0.0;
         log->entries[i].prompt = NULL;
         log->entries[i].response = NULL;
     }
@@ -92,6 +105,8 @@ int pulse_log_append(PulseLog *log, const char *message) {
 
     log->entries[log->count].kind = PULSE_LOG_KIND_GENERIC;
     log->entries[log->count].message = dup_string(message);
+    log->entries[log->count].model_name = NULL;
+    log->entries[log->count].latency_ms = 0.0;
     log->entries[log->count].prompt = NULL;
     log->entries[log->count].response = NULL;
 
@@ -104,6 +119,14 @@ int pulse_log_append(PulseLog *log, const char *message) {
 }
 
 int pulse_log_ai(PulseLog *log, const char *prompt, const char *response) {
+    return pulse_log_ai_observe(log, NULL, prompt, response, 0.0);
+}
+
+int pulse_log_ai_observe(PulseLog *log,
+                          const char *model_name,
+                          const char *prompt,
+                          const char *response,
+                          double latency_ms) {
     if (!log || !prompt || !response) {
         return -1;
     }
@@ -114,6 +137,8 @@ int pulse_log_ai(PulseLog *log, const char *prompt, const char *response) {
 
     log->entries[log->count].kind = PULSE_LOG_KIND_AI;
     log->entries[log->count].message = NULL;
+    log->entries[log->count].model_name = model_name;
+    log->entries[log->count].latency_ms = latency_ms;
     log->entries[log->count].prompt = dup_string(prompt);
     log->entries[log->count].response = dup_string(response);
 
@@ -122,6 +147,8 @@ int pulse_log_ai(PulseLog *log, const char *prompt, const char *response) {
         free((void *)log->entries[log->count].response);
         log->entries[log->count].prompt = NULL;
         log->entries[log->count].response = NULL;
+        log->entries[log->count].model_name = NULL;
+        log->entries[log->count].latency_ms = 0.0;
         return -1;
     }
 

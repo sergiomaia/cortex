@@ -21,7 +21,11 @@ TEST_SRCS := tests/test_runner.c \
              tests/core/test_incident_summary.c \
              tests/core/test_neural_memory.c \
              tests/core/test_pulse_log.c \
+             tests/core/test_pulse_logger.c \
              tests/core/test_pulse_metrics.c \
+             tests/core/test_pulse_trace.c \
+             tests/core/test_pulse_ai.c \
+             tests/core/test_neural_pulse_ai_integration.c \
              tests/core/test_neural_stream.c \
              tests/core/test_neural_embedding.c \
              tests/core/test_neural_retrieval.c \

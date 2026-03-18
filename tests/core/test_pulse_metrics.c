@@ -56,3 +56,26 @@ void test_pulse_trace_measures_elapsed_time_and_updates_metrics(void) {
     ASSERT_TRUE(metrics.total_ai_ms >= 0.0);
 }
 
+void test_pulse_metrics_key_based_counts_and_retrieval(void) {
+    PulseMetrics metrics;
+    unsigned long v;
+
+    pulse_metrics_init(&metrics);
+
+    /* Increment multiple times and validate count retrieval by key. */
+    pulse_metrics_inc_count(&metrics, "requests", 1);
+    pulse_metrics_inc_count(&metrics, "requests", 2);
+    pulse_metrics_inc_count(&metrics, "requests", 3);
+
+    v = pulse_metrics_get_count(&metrics, "requests");
+    ASSERT_EQ(v, 6UL);
+
+    /* Missing keys should report 0. */
+    v = pulse_metrics_get_count(&metrics, "missing");
+    ASSERT_EQ(v, 0UL);
+
+    /* Known legacy keys should remain in sync. */
+    pulse_metrics_inc_count(&metrics, "request_count", 5);
+    ASSERT_EQ(metrics.request_count, 5UL);
+}
+
