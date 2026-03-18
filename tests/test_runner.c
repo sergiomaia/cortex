@@ -2,6 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../core/core_env.h"
+#include "../core/core_config.h"
+#include "../core/core_logger.h"
+#include "../action/action_router.h"
+#include "../action/action_dispatch.h"
+
 static int test_count = 0;
 static int test_failures = 0;
 
@@ -48,11 +54,119 @@ static int test_failures = 0;
         }                                                                       \
     } while (0)
 
-static void run_all_tests(void) {
-    /* Placeholder: add real tests here using the ASSERT_* macros. */
+static void test_core_env_current_defaults_to_development(void) {
+    CoreEnv env = core_env_current();
+    ASSERT_STR_EQ(env.name, "development");
+}
+
+static void test_core_config_load_defaults(void) {
+    CoreConfig cfg = core_config_load();
+    ASSERT_STR_EQ(cfg.environment, "development");
+    ASSERT_EQ(cfg.port, 3000);
+}
+
+static void test_core_logger_levels(void) {
+    CoreLogger logger = core_logger_init(stdout, CORE_LOG_LEVEL_INFO);
+
+    /* Both info and error should be logged when level is INFO. */
+    core_logger_info(&logger, "info message");
+    core_logger_error(&logger, "error message");
+
+    logger = core_logger_init(stdout, CORE_LOG_LEVEL_ERROR);
+
+    /* Only error should be logged when level is ERROR. */
+    core_logger_info(&logger, "info should be filtered");
+    core_logger_error(&logger, "error should appear");
+
+    /* No assertions on output, just ensure no crashes / undefined behavior. */
     ASSERT_TRUE(1);
-    ASSERT_EQ(1, 1);
-    ASSERT_STR_EQ("ok", "ok");
+}
+
+static void test_action_router_add_and_match_literal(void) {
+    ActionRouter router;
+    ActionHandler handler;
+
+    action_router_init(&router);
+
+    void sample_handler(ActionRequest *req, ActionResponse *res) {
+        (void)req;
+        res->status = 200;
+        res->body = "ok";
+    }
+
+    ASSERT_EQ(action_router_add_route(&router, "GET", "/hello", sample_handler), 0);
+
+    handler = action_router_match(&router, "GET", "/hello");
+    ASSERT_TRUE(handler != NULL);
+    ASSERT_TRUE(handler == sample_handler);
+
+    handler = action_router_match(&router, "POST", "/hello");
+    ASSERT_TRUE(handler == NULL);
+}
+
+static void test_action_router_match_with_param(void) {
+    ActionRouter router;
+    ActionHandler handler;
+
+    action_router_init(&router);
+
+    void sample_handler(ActionRequest *req, ActionResponse *res) {
+        (void)req;
+        res->status = 200;
+        res->body = "ok";
+    }
+
+    ASSERT_EQ(action_router_add_route(&router, "GET", "/users/:id", sample_handler), 0);
+
+    handler = action_router_match(&router, "GET", "/users/123");
+    ASSERT_TRUE(handler != NULL);
+
+    handler = action_router_match(&router, "GET", "/users");
+    ASSERT_TRUE(handler == NULL);
+}
+
+static void test_action_dispatch_success_and_not_found(void) {
+    ActionRouter router;
+    ActionRequest req;
+    ActionResponse res;
+
+    action_router_init(&router);
+
+    void hello_handler(ActionRequest *r, ActionResponse *s) {
+        (void)r;
+        s->status = 200;
+        s->body = "hello";
+    }
+
+    action_router_add_route(&router, "GET", "/hello", hello_handler);
+
+    req.method = "GET";
+    req.path = "/hello";
+    req.body = NULL;
+
+    res.status = 0;
+    res.body = NULL;
+
+    ASSERT_EQ(action_dispatch(&router, &req, &res), 0);
+    ASSERT_EQ(res.status, 200);
+    ASSERT_STR_EQ(res.body, "hello");
+
+    req.path = "/missing";
+    res.status = 0;
+    res.body = NULL;
+
+    ASSERT_EQ(action_dispatch(&router, &req, &res), -1);
+    ASSERT_EQ(res.status, 404);
+    ASSERT_STR_EQ(res.body, "Not Found");
+}
+
+static void run_all_tests(void) {
+    test_core_env_current_defaults_to_development();
+    test_core_config_load_defaults();
+    test_core_logger_levels();
+    test_action_router_add_and_match_literal();
+    test_action_router_match_with_param();
+    test_action_dispatch_success_and_not_found();
 }
 
 int main(void) {
