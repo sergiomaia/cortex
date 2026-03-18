@@ -6,7 +6,24 @@ ACTION_SRCS := $(wildcard action/*.c)
 SRCS := $(CORE_SRCS) $(ACTION_SRCS)
 OBJS := $(SRCS:.c=.o)
 
-TEST_SRCS := tests/test_runner.c
+TEST_SRCS := tests/test_runner.c \
+             tests/core/test_core_app.c \
+             tests/core/test_core_logger.c \
+             tests/core/test_core_config.c \
+             tests/core/test_neural_runtime.c \
+             tests/core/test_neural_prompt.c \
+             tests/core/test_incident_summary.c \
+             tests/core/test_neural_memory.c \
+             tests/core/test_pulse_log.c \
+             tests/core/test_neural_stream.c \
+             tests/core/test_llm_integration.c \
+             tests/core/test_active_record.c \
+             tests/action/test_action_request_response.c \
+             tests/action/test_action_router.c \
+             tests/action/test_action_controller.c \
+             tests/action/test_action_health.c \
+             tests/action/test_action_incidents.c \
+             tests/action/test_action_ai_incident_summary.c
 TEST_BIN := tests/test_runner
 
 LIB := libcortex.a

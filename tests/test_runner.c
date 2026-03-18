@@ -7,52 +7,38 @@
 #include "../core/core_logger.h"
 #include "../action/action_router.h"
 #include "../action/action_dispatch.h"
+#include "test_assert.h"
 
-static int test_count = 0;
-static int test_failures = 0;
+/* Prototypes for tests defined in tests/core/*.c and tests/action/*.c */
+void test_core_app_init_does_not_crash(void);
+void test_core_logger_outputs_messages(void);
+void test_core_config_loads_environment_variables(void);
+void test_neural_runtime_run_returns_response(void);
+void test_neural_runtime_model_name_and_prompt_usage(void);
+void test_neural_prompt_replaces_variables(void);
+void test_neural_prompt_handles_missing_variables(void);
+void test_incident_summary_builds_prompt_and_returns_response(void);
+void test_neural_memory_store_and_retrieve_by_keyword(void);
+void test_neural_memory_retrieval_accuracy_overwrite(void);
+void test_pulse_log_generates_entries(void);
+void test_pulse_log_ai_includes_prompt_and_response(void);
+void test_neural_stream_calls_callback_multiple_times(void);
+void test_active_record_create_save_find(void);
+void test_active_record_delete_and_data_consistency(void);
+void test_action_request_parse_simple_get(void);
+void test_action_response_set_formats_fields(void);
+void test_action_router_register_and_match_literal_route(void);
+void test_action_router_match_dynamic_incident_route(void);
+void test_action_controller_receives_request_params(void);
+void test_action_controller_render_json_and_text(void);
+void test_action_health_endpoint_flow(void);
+void test_action_incidents_show_integration(void);
+void test_action_ai_incident_summary_endpoint(void);
+void test_llm_integration_validates_prompt_and_response(void);
+void test_llm_integration_handles_missing_variables_as_empty(void);
 
-#define ASSERT_TRUE(cond)                                                       \
-    do {                                                                        \
-        ++test_count;                                                           \
-        if (!(cond)) {                                                          \
-            ++test_failures;                                                   \
-            printf("[FAIL] %s:%d: ASSERT_TRUE(%s)\n", __FILE__, __LINE__, #cond); \
-        } else {                                                                \
-            printf("[PASS] %s:%d: ASSERT_TRUE(%s)\n", __FILE__, __LINE__, #cond); \
-        }                                                                       \
-    } while (0)
-
-#define ASSERT_EQ(a, b)                                                         \
-    do {                                                                        \
-        ++test_count;                                                           \
-        long _va = (long)(a);                                                   \
-        long _vb = (long)(b);                                                   \
-        if (_va != _vb) {                                                       \
-            ++test_failures;                                                   \
-            printf("[FAIL] %s:%d: ASSERT_EQ(%s, %s) => %ld != %ld\n",           \
-                   __FILE__, __LINE__, #a, #b, _va, _vb);                       \
-        } else {                                                                \
-            printf("[PASS] %s:%d: ASSERT_EQ(%s, %s)\n",                         \
-                   __FILE__, __LINE__, #a, #b);                                 \
-        }                                                                       \
-    } while (0)
-
-#define ASSERT_STR_EQ(a, b)                                                     \
-    do {                                                                        \
-        ++test_count;                                                           \
-        const char *_sa = (a);                                                  \
-        const char *_sb = (b);                                                  \
-        if (!_sa) _sa = "";                                                     \
-        if (!_sb) _sb = "";                                                     \
-        if (strcmp(_sa, _sb) != 0) {                                            \
-            ++test_failures;                                                   \
-            printf("[FAIL] %s:%d: ASSERT_STR_EQ(%s, %s) => \"%s\" != \"%s\"\n", \
-                   __FILE__, __LINE__, #a, #b, _sa, _sb);                       \
-        } else {                                                                \
-            printf("[PASS] %s:%d: ASSERT_STR_EQ(%s, %s)\n",                     \
-                   __FILE__, __LINE__, #a, #b);                                 \
-        }                                                                       \
-    } while (0)
+int test_count = 0;
+int test_failures = 0;
 
 static void test_core_env_current_defaults_to_development(void) {
     CoreEnv env = core_env_current();
@@ -164,6 +150,32 @@ static void run_all_tests(void) {
     test_core_env_current_defaults_to_development();
     test_core_config_load_defaults();
     test_core_logger_levels();
+    test_core_app_init_does_not_crash();
+    test_core_logger_outputs_messages();
+    test_core_config_loads_environment_variables();
+    test_neural_runtime_run_returns_response();
+    test_neural_runtime_model_name_and_prompt_usage();
+    test_neural_prompt_replaces_variables();
+    test_neural_prompt_handles_missing_variables();
+    test_incident_summary_builds_prompt_and_returns_response();
+    test_neural_memory_store_and_retrieve_by_keyword();
+    test_neural_memory_retrieval_accuracy_overwrite();
+    test_neural_stream_calls_callback_multiple_times();
+    test_pulse_log_generates_entries();
+    test_pulse_log_ai_includes_prompt_and_response();
+    test_llm_integration_validates_prompt_and_response();
+    test_llm_integration_handles_missing_variables_as_empty();
+    test_active_record_create_save_find();
+    test_active_record_delete_and_data_consistency();
+    test_action_request_parse_simple_get();
+    test_action_response_set_formats_fields();
+    test_action_router_register_and_match_literal_route();
+    test_action_router_match_dynamic_incident_route();
+    test_action_controller_receives_request_params();
+    test_action_controller_render_json_and_text();
+    test_action_health_endpoint_flow();
+    test_action_incidents_show_integration();
+    test_action_ai_incident_summary_endpoint();
     test_action_router_add_and_match_literal();
     test_action_router_match_with_param();
     test_action_dispatch_success_and_not_found();
