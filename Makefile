@@ -27,6 +27,7 @@ TEST_SRCS := tests/test_runner.c \
              tests/core/test_neural_retrieval.c \
              tests/core/test_llm_integration.c \
              tests/core/test_neural_agent.c \
+             tests/core/test_active_model.c \
              tests/core/test_active_migration.c \
              tests/core/test_active_record.c \
              tests/core/test_active_query.c \
