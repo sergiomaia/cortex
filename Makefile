@@ -16,7 +16,11 @@ TEST_SRCS := tests/test_runner.c \
              tests/core/test_neural_memory.c \
              tests/core/test_pulse_log.c \
              tests/core/test_neural_stream.c \
+             tests/core/test_neural_embedding.c \
+             tests/core/test_neural_retrieval.c \
              tests/core/test_llm_integration.c \
+             tests/core/test_neural_agent.c \
+             tests/core/test_active_migration.c \
              tests/core/test_active_record.c \
              tests/core/test_active_query.c \
              tests/core/test_active_relations.c \
@@ -42,7 +46,7 @@ $(LIB): $(OBJS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(TEST_BIN): $(LIB) $(TEST_SRCS)
-	$(CC) $(CFLAGS) $(TEST_SRCS) -L. -lcortex -o $(TEST_BIN)
+	$(CC) $(CFLAGS) $(TEST_SRCS) -L. -lcortex -lm -o $(TEST_BIN)
 
 test: $(TEST_BIN)
 	./$(TEST_BIN)
