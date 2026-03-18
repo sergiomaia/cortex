@@ -68,6 +68,11 @@ void test_forge_generate_controller_creates_file(void);
 void test_forge_generate_model_creates_file(void);
 void test_forge_generate_neural_model_creates_file(void);
 
+void test_cli_parse_server_command(void);
+void test_cli_parse_generate_controller_command(void);
+void test_cli_parse_invalid_command_fails(void);
+void test_cli_dispatch_generate_controller_executes_handler(void);
+
 int test_count = 0;
 int test_failures = 0;
 
@@ -237,6 +242,11 @@ static void run_all_tests(void) {
     test_forge_generate_controller_creates_file();
     test_forge_generate_model_creates_file();
     test_forge_generate_neural_model_creates_file();
+
+    test_cli_parse_server_command();
+    test_cli_parse_generate_controller_command();
+    test_cli_parse_invalid_command_fails();
+    test_cli_dispatch_generate_controller_executes_handler();
 }
 
 int main(void) {
