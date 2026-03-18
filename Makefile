@@ -18,6 +18,8 @@ TEST_SRCS := tests/test_runner.c \
              tests/core/test_neural_stream.c \
              tests/core/test_llm_integration.c \
              tests/core/test_active_record.c \
+             tests/core/test_active_query.c \
+             tests/core/test_active_relations.c \
              tests/action/test_action_request_response.c \
              tests/action/test_action_router.c \
              tests/action/test_action_controller.c \
