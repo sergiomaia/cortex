@@ -50,6 +50,9 @@ void test_action_ai_incident_summary_endpoint(void);
 void test_llm_integration_validates_prompt_and_response(void);
 void test_llm_integration_handles_missing_variables_as_empty(void);
 
+void test_flow_queue_enqueue_and_worker_dispatch_executes_jobs(void);
+void test_flow_queue_maintains_execution_order(void);
+
 int test_count = 0;
 int test_failures = 0;
 
@@ -205,6 +208,9 @@ static void run_all_tests(void) {
     test_action_router_add_and_match_literal();
     test_action_router_match_with_param();
     test_action_dispatch_success_and_not_found();
+
+    test_flow_queue_enqueue_and_worker_dispatch_executes_jobs();
+    test_flow_queue_maintains_execution_order();
 }
 
 int main(void) {

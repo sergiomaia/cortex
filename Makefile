@@ -1,12 +1,14 @@
 CC := gcc
-CFLAGS := -Wall -Wextra -std=c11 -Icore -Iaction
+CFLAGS := -Wall -Wextra -std=c11 -Icore -Iaction -Iflow
 
 CORE_SRCS := $(wildcard core/*.c)
 ACTION_SRCS := $(wildcard action/*.c)
-SRCS := $(CORE_SRCS) $(ACTION_SRCS)
+FLOW_SRCS := $(wildcard flow/*.c)
+SRCS := $(CORE_SRCS) $(ACTION_SRCS) $(FLOW_SRCS)
 OBJS := $(SRCS:.c=.o)
 
 TEST_SRCS := tests/test_runner.c \
+             tests/flow/test_flow.c \
              tests/core/test_core_app.c \
              tests/core/test_core_logger.c \
              tests/core/test_core_config.c \
