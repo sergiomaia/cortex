@@ -42,6 +42,8 @@ void test_neural_retrieval_store_and_search_top_k(void);
 void test_neural_retrieval_integrates_with_memory(void);
 void test_neural_agent_register_tools_and_call_by_trigger(void);
 void test_neural_agent_unknown_input_returns_null(void);
+void test_pulse_metrics_counts_and_times_requests_and_ai_calls(void);
+void test_pulse_trace_measures_elapsed_time_and_updates_metrics(void);
 void test_action_request_parse_simple_get(void);
 void test_action_response_set_formats_fields(void);
 void test_action_router_register_and_match_literal_route(void);
@@ -72,6 +74,9 @@ void test_cli_parse_server_command(void);
 void test_cli_parse_generate_controller_command(void);
 void test_cli_parse_invalid_command_fails(void);
 void test_cli_dispatch_generate_controller_executes_handler(void);
+
+void test_pulse_metrics_counts_and_times_requests_and_ai_calls(void);
+void test_pulse_trace_measures_elapsed_time_and_updates_metrics(void);
 
 int test_count = 0;
 int test_failures = 0;
@@ -216,6 +221,8 @@ static void run_all_tests(void) {
     test_neural_retrieval_integrates_with_memory();
     test_neural_agent_register_tools_and_call_by_trigger();
     test_neural_agent_unknown_input_returns_null();
+    test_pulse_metrics_counts_and_times_requests_and_ai_calls();
+    test_pulse_trace_measures_elapsed_time_and_updates_metrics();
     test_action_request_parse_simple_get();
     test_action_response_set_formats_fields();
     test_action_router_register_and_match_literal_route();
@@ -247,6 +254,9 @@ static void run_all_tests(void) {
     test_cli_parse_generate_controller_command();
     test_cli_parse_invalid_command_fails();
     test_cli_dispatch_generate_controller_executes_handler();
+
+    test_pulse_metrics_counts_and_times_requests_and_ai_calls();
+    test_pulse_trace_measures_elapsed_time_and_updates_metrics();
 }
 
 int main(void) {
