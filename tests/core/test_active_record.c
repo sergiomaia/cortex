@@ -30,30 +30,65 @@ void test_active_record_delete_and_data_consistency(void) {
     ActiveRecordStore store;
     ActiveModel *m1;
     ActiveModel *m2;
+    ActiveModel *m3;
     ActiveModel *found;
+    int id1;
+    int id2;
+    int id3;
 
     active_record_init(&store);
 
     m1 = active_record_create(&store, "First");
     m2 = active_record_create(&store, "Second");
+    m3 = active_record_create(&store, "Third");
+
     ASSERT_TRUE(m1 != NULL);
     ASSERT_TRUE(m2 != NULL);
+    ASSERT_TRUE(m3 != NULL);
+    ASSERT_EQ(store.count, 3);
+
+    id1 = m1->id;
+    id2 = m2->id;
+    id3 = m3->id;
+    ASSERT_EQ(id1, 1);
+    ASSERT_EQ(id2, 2);
+    ASSERT_EQ(id3, 3);
+
+    /* Ensure each record can be retrieved correctly by its ID. */
+    found = active_record_find(&store, id1);
+    ASSERT_TRUE(found != NULL);
+    ASSERT_EQ(found->id, id1);
+    ASSERT_STR_EQ(found->name, "First");
+
+    found = active_record_find(&store, id2);
+    ASSERT_TRUE(found != NULL);
+    ASSERT_EQ(found->id, id2);
+    ASSERT_STR_EQ(found->name, "Second");
+
+    found = active_record_find(&store, id3);
+    ASSERT_TRUE(found != NULL);
+    ASSERT_EQ(found->id, id3);
+    ASSERT_STR_EQ(found->name, "Third");
+
+    /* Delete one record and ensure it is gone, while other records remain
+     * accessible and consistent. */
+    ASSERT_EQ(active_record_delete(&store, id2), 0);
     ASSERT_EQ(store.count, 2);
 
-    /* Delete the first record and ensure it is gone. Since the delete
-     * implementation moves the last element into the deleted slot,
-     * we primarily validate that:
-     *  - the store count is decremented
-     *  - the remaining record is still accessible and consistent.
-     */
-    ASSERT_EQ(active_record_delete(&store, m1->id), 0);
-    ASSERT_EQ(store.count, 1);
+    /* Deleted record should no longer be findable. */
+    found = active_record_find(&store, id2);
+    ASSERT_TRUE(found == NULL);
 
-    /* The remaining record should still be findable and intact. */
-    found = active_record_find(&store, m2->id);
+    /* Other records should still be findable and intact. */
+    found = active_record_find(&store, id1);
     ASSERT_TRUE(found != NULL);
-    ASSERT_EQ(found->id, m2->id);
-    ASSERT_STR_EQ(found->name, "Second");
+    ASSERT_EQ(found->id, id1);
+    ASSERT_STR_EQ(found->name, "First");
+
+    found = active_record_find(&store, id3);
+    ASSERT_TRUE(found != NULL);
+    ASSERT_EQ(found->id, id3);
+    ASSERT_STR_EQ(found->name, "Third");
 
     active_record_free(&store);
 }
