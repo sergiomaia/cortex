@@ -13,7 +13,7 @@
 #include "../guard/guard_session.h"
 #include "../guard/guard_auth.h"
 
-/* Prototypes for tests defined in tests/core/*.c, tests/action/*.c, tests/cache/*.c */
+/* Prototypes for tests defined in tests/core/*.c, tests/action/*.c, tests/cache/*.c, tests/forge/*.c */
 void test_core_app_init_does_not_crash(void);
 void test_core_logger_outputs_messages(void);
 void test_core_config_loads_environment_variables(void);
@@ -63,6 +63,10 @@ void test_cache_memory_optional_expiration(void);
 
 void test_guard_session_create_and_validate(void);
 void test_guard_auth_basic_success_and_failure(void);
+
+void test_forge_generate_controller_creates_file(void);
+void test_forge_generate_model_creates_file(void);
+void test_forge_generate_neural_model_creates_file(void);
 
 int test_count = 0;
 int test_failures = 0;
@@ -229,6 +233,10 @@ static void run_all_tests(void) {
 
     test_guard_session_create_and_validate();
     test_guard_auth_basic_success_and_failure();
+
+    test_forge_generate_controller_creates_file();
+    test_forge_generate_model_creates_file();
+    test_forge_generate_neural_model_creates_file();
 }
 
 int main(void) {
