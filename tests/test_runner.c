@@ -25,6 +25,8 @@ void test_pulse_log_ai_includes_prompt_and_response(void);
 void test_neural_stream_calls_callback_multiple_times(void);
 void test_active_record_create_save_find(void);
 void test_active_record_delete_and_data_consistency(void);
+void test_active_migration_register_and_execute_in_order(void);
+void test_active_migration_run_only_pending(void);
 void test_active_query_where_filters_by_name(void);
 void test_active_query_limit_caps_results(void);
 void test_active_query_where_and_limit_chaining(void);
@@ -171,6 +173,8 @@ static void run_all_tests(void) {
     test_llm_integration_handles_missing_variables_as_empty();
     test_active_record_create_save_find();
     test_active_record_delete_and_data_consistency();
+    test_active_migration_register_and_execute_in_order();
+    test_active_migration_run_only_pending();
     test_active_query_where_filters_by_name();
     test_active_query_limit_caps_results();
     test_active_query_where_and_limit_chaining();
