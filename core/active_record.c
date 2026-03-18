@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "active_record.h"
+#include "active_model.h"
 
 void active_record_init(ActiveRecordStore *store) {
     if (!store) {
@@ -45,7 +46,7 @@ ActiveModel *active_record_create(ActiveRecordStore *store, const char *name) {
     }
 
     model = &store->items[store->count];
-    model->id = store->next_id++;
+    active_model_init(model, store->next_id++);
     model->name = name;
     store->count += 1;
 
