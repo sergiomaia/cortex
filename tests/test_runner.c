@@ -9,7 +9,7 @@
 #include "../action/action_dispatch.h"
 #include "test_assert.h"
 
-/* Prototypes for tests defined in tests/core/*.c and tests/action/*.c */
+/* Prototypes for tests defined in tests/core/*.c, tests/action/*.c, tests/cache/*.c */
 void test_core_app_init_does_not_crash(void);
 void test_core_logger_outputs_messages(void);
 void test_core_config_loads_environment_variables(void);
@@ -52,6 +52,10 @@ void test_llm_integration_handles_missing_variables_as_empty(void);
 
 void test_flow_queue_enqueue_and_worker_dispatch_executes_jobs(void);
 void test_flow_queue_maintains_execution_order(void);
+
+void test_cache_memory_set_and_get_key(void);
+void test_cache_memory_overwrite_value(void);
+void test_cache_memory_optional_expiration(void);
 
 int test_count = 0;
 int test_failures = 0;
@@ -211,6 +215,10 @@ static void run_all_tests(void) {
 
     test_flow_queue_enqueue_and_worker_dispatch_executes_jobs();
     test_flow_queue_maintains_execution_order();
+
+    test_cache_memory_set_and_get_key();
+    test_cache_memory_overwrite_value();
+    test_cache_memory_optional_expiration();
 }
 
 int main(void) {
