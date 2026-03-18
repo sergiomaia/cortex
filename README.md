@@ -21,6 +21,11 @@ Build with:
 
 ```bash
 make
-./cortex_app server
+```
+
+Run tests with:
+
+```bash
+make test
 ```
 
