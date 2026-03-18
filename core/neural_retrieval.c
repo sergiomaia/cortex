@@ -141,6 +141,7 @@ int neural_retrieval_search(const NeuralRetrieval *retrieval,
                             const char **out_keywords,
                             float *out_scores) {
     int i, j;
+    float *scores_buf = NULL;
 
     if (!retrieval || top_k <= 0) {
         return -1;
@@ -154,45 +155,48 @@ int neural_retrieval_search(const NeuralRetrieval *retrieval,
         top_k = retrieval->count;
     }
 
-    for (i = 0; i < retrieval->count; ++i) {
+    scores_buf = (float *)malloc((size_t)top_k * sizeof(float));
+    if (!scores_buf) {
+        return -1;
+    }
+
+    /* Initialize with the first top_k items. */
+    for (i = 0; i < top_k; ++i) {
+        float score = cosine_similarity(&query, &retrieval->entries[i].embedding);
+        scores_buf[i] = score;
+        if (out_keywords) {
+            out_keywords[i] = retrieval->entries[i].keyword;
+        }
+        if (out_scores) {
+            out_scores[i] = score;
+        }
+    }
+
+    /* Maintain the current worst element in scores_buf. */
+    for (i = top_k; i < retrieval->count; ++i) {
         float score = cosine_similarity(&query, &retrieval->entries[i].embedding);
 
-        if (i < top_k) {
-            if (out_keywords) {
-                out_keywords[i] = retrieval->entries[i].keyword;
+        int min_index = 0;
+        float min_score = scores_buf[0];
+        for (j = 1; j < top_k; ++j) {
+            if (scores_buf[j] < min_score) {
+                min_score = scores_buf[j];
+                min_index = j;
             }
-            if (out_scores) {
-                out_scores[i] = score;
-            }
-        } else {
-            int min_index = 0;
-            float min_score = out_scores ? out_scores[0] : 0.0f;
+        }
 
-            if (out_scores) {
-                for (j = 1; j < top_k; ++j) {
-                    if (out_scores[j] < min_score) {
-                        min_score = out_scores[j];
-                        min_index = j;
-                    }
-                }
-                if (score > min_score) {
-                    if (out_keywords) {
-                        out_keywords[min_index] = retrieval->entries[i].keyword;
-                    }
-                    out_scores[min_index] = score;
-                }
-            } else if (out_keywords) {
-                for (j = 1; j < top_k; ++j) {
-                    if (strcmp(out_keywords[j], out_keywords[min_index]) < 0) {
-                        min_index = j;
-                    }
-                }
-                (void)score;
+        if (score > min_score) {
+            scores_buf[min_index] = score;
+            if (out_keywords) {
                 out_keywords[min_index] = retrieval->entries[i].keyword;
+            }
+            if (out_scores) {
+                out_scores[min_index] = score;
             }
         }
     }
 
+    free(scores_buf);
     return top_k;
 }
 
