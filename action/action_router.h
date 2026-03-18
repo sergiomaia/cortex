@@ -12,6 +12,7 @@ typedef struct {
 typedef struct {
     ActionRoute *routes;
     int route_count;
+    int route_capacity;
 } ActionRouter;
 
 void action_router_init(ActionRouter *router);
