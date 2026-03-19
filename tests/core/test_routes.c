@@ -25,7 +25,20 @@ void test_root_route_returns_welcome_page(void) {
 
     ASSERT_EQ(action_dispatch(&router, &req, &res), 0);
     ASSERT_EQ(res.status, 200);
-    ASSERT_STR_EQ(res.body, "Welcome to Cortex");
+    ASSERT_TRUE(res.body != NULL);
+
+    /* Welcome page should now return full HTML. */
+    ASSERT_TRUE(strstr(res.body, "<h1>") != NULL);
+    ASSERT_TRUE(strstr(res.body, "Welcome to Cortex.") != NULL);
+
+    /* Placeholders should be substituted with dynamic values. */
+    ASSERT_TRUE(strstr(res.body, "{{C_STANDARD}}") == NULL);
+    ASSERT_TRUE(strstr(res.body, "{{CORTEX_VERSION}}") == NULL);
+
+    /* Cortex version should include the build-time macro. */
+    char needle_version[128];
+    snprintf(needle_version, sizeof(needle_version), "Cortex v%s", CORTEX_VERSION);
+    ASSERT_TRUE(strstr(res.body, needle_version) != NULL);
 }
 
 static void register_sample_post_routes(ActionRouter *router, ActiveRecordStore *store) {
