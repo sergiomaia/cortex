@@ -7,8 +7,9 @@ FLOW_SRCS := $(wildcard flow/*.c)
 CACHE_SRCS := $(wildcard cache/*.c)
 GUARD_SRCS := $(wildcard guard/*.c)
 FORGE_SRCS := $(wildcard forge/*.c)
+DB_SRCS := $(wildcard db/*.c)
 CLI_SRCS := $(wildcard cli/*.c)
-SRCS := $(CORE_SRCS) $(ACTION_SRCS) $(FLOW_SRCS) $(CACHE_SRCS) $(GUARD_SRCS) $(FORGE_SRCS) $(CLI_SRCS)
+SRCS := $(CORE_SRCS) $(ACTION_SRCS) $(FLOW_SRCS) $(CACHE_SRCS) $(GUARD_SRCS) $(FORGE_SRCS) $(DB_SRCS) $(CLI_SRCS)
 OBJS := $(SRCS:.c=.o)
 
 TEST_SRCS := tests/test_runner.c \
@@ -46,7 +47,11 @@ TEST_SRCS := tests/test_runner.c \
              tests/cache/test_cache_memory.c \
              tests/guard/test_guard.c \
              tests/forge/test_forge_generators.c \
-             tests/cli/test_cli.c
+             tests/db/test_db_create.c \
+             tests/db/test_db_migrate.c \
+             tests/db/test_db_migration_generator.c \
+             tests/cli/test_cli.c \
+             tests/cli/test_cli_server.c
 TEST_BIN := tests/test_runner
 
 LIB := libcortex.a

@@ -105,6 +105,19 @@ static int mark_executed(ActiveMigrationRegistry *registry, int version) {
     return 0;
 }
 
+int active_migration_mark_executed(ActiveMigrationRegistry *registry, int version) {
+    if (!registry || version <= 0) {
+        return -1;
+    }
+
+    /* Avoid duplicates. */
+    if (active_migration_is_executed(registry, version)) {
+        return 0;
+    }
+
+    return mark_executed(registry, version);
+}
+
 int active_migration_run_pending(ActiveMigrationRegistry *registry) {
     int executed_any = 0;
 
