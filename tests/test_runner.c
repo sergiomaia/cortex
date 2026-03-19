@@ -57,6 +57,8 @@ void test_pulse_trace_measures_elapsed_time_and_updates_metrics(void);
 void test_pulse_trace_duration_positive(void);
 void test_pulse_ai_logs_model_prompt_response_and_latency(void);
 void test_neural_runtime_triggers_pulse_ai_logging(void);
+void test_root_route_returns_welcome_page(void);
+void test_posts_index_route_via_router(void);
 void test_action_request_parse_simple_get(void);
 void test_action_response_set_formats_fields(void);
 void test_action_router_register_and_match_literal_route(void);
@@ -91,6 +93,7 @@ void test_db_migrate_runs_pending_and_tracks_executed(void);
 void test_db_migration_generator_creates_timestamped_file_with_up_down(void);
 
 void test_cli_parse_server_command(void);
+void test_cli_parse_version_command(void);
 void test_cli_parse_new_command(void);
 void test_cli_parse_generate_controller_command(void);
 void test_cli_parse_db_migrate_command(void);
@@ -265,6 +268,8 @@ static void run_all_tests(void) {
     test_pulse_trace_duration_positive();
     test_pulse_ai_logs_model_prompt_response_and_latency();
     test_neural_runtime_triggers_pulse_ai_logging();
+    test_root_route_returns_welcome_page();
+    test_posts_index_route_via_router();
     test_action_request_parse_simple_get();
     test_action_response_set_formats_fields();
     test_action_router_register_and_match_literal_route();
@@ -301,6 +306,7 @@ static void run_all_tests(void) {
     test_db_migration_generator_creates_timestamped_file_with_up_down();
 
     test_cli_parse_server_command();
+    test_cli_parse_version_command();
     test_cli_parse_new_command();
     test_cli_parse_generate_controller_command();
     test_cli_parse_db_migrate_command();

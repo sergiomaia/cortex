@@ -57,6 +57,18 @@ void test_cli_parse_server_command(void) {
     free_argv(argv, argc);
 }
 
+void test_cli_parse_version_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "--version", NULL, NULL, &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_VERSION);
+    ASSERT_TRUE(parsed.name == NULL);
+
+    free_argv(argv, argc);
+}
+
 void test_cli_parse_generate_controller_command(void) {
     int argc;
     char **argv = make_argv("cortex", "generate", "controller", "users", &argc);
