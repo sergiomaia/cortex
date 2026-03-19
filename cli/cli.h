@@ -19,6 +19,7 @@ typedef enum {
     CLI_COMMAND_SERVER,
     CLI_COMMAND_NEW,
     CLI_COMMAND_GENERATE_CONTROLLER,
+    CLI_COMMAND_GENERATE_SCAFFOLD,
     CLI_COMMAND_DB_MIGRATE,
     CLI_COMMAND_DB_CREATE
 } CliCommand;
@@ -26,6 +27,8 @@ typedef enum {
 typedef struct {
     CliCommand command;
     const char *name; /* Used by new and generate controller, NULL otherwise. */
+    const char **attributes; /* Used by generate scaffold. */
+    int attribute_count; /* Number of entries in attributes. */
 } CliParsed;
 
 /* Parse argv (including program name at argv[0]) into a CliParsed value.
