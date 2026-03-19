@@ -5,7 +5,10 @@
  *
  * Supported commands:
  *   cortex server
+ *   cortex new <project_name>
  *   cortex generate controller <name>
+ *   cortex db:migrate
+ *   cortex db:create
  *
  * The public API is kept tiny so tests can exercise parsing and
  * dispatching without spawning a real server process.
@@ -14,12 +17,15 @@
 typedef enum {
     CLI_COMMAND_NONE = 0,
     CLI_COMMAND_SERVER,
-    CLI_COMMAND_GENERATE_CONTROLLER
+    CLI_COMMAND_NEW,
+    CLI_COMMAND_GENERATE_CONTROLLER,
+    CLI_COMMAND_DB_MIGRATE,
+    CLI_COMMAND_DB_CREATE
 } CliCommand;
 
 typedef struct {
     CliCommand command;
-    const char *name; /* Used by generate controller, NULL otherwise. */
+    const char *name; /* Used by new and generate controller, NULL otherwise. */
 } CliParsed;
 
 /* Parse argv (including program name at argv[0]) into a CliParsed value.

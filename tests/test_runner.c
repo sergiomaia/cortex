@@ -81,13 +81,28 @@ void test_guard_session_create_and_validate(void);
 void test_guard_auth_basic_success_and_failure(void);
 
 void test_forge_generate_controller_creates_file(void);
+void test_forge_generate_controller_users_creates_file_and_stub(void);
 void test_forge_generate_model_creates_file(void);
+void test_forge_generate_model_user_creates_file_with_fields_and_active_record(void);
 void test_forge_generate_neural_model_creates_file(void);
+void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void);
+void test_db_create_creates_db_folder_and_storage_file(void);
+void test_db_migrate_runs_pending_and_tracks_executed(void);
+void test_db_migration_generator_creates_timestamped_file_with_up_down(void);
 
 void test_cli_parse_server_command(void);
+void test_cli_parse_new_command(void);
 void test_cli_parse_generate_controller_command(void);
+void test_cli_parse_db_migrate_command(void);
+void test_cli_parse_db_create_command(void);
 void test_cli_parse_invalid_command_fails(void);
 void test_cli_dispatch_generate_controller_executes_handler(void);
+void test_cli_dispatch_db_migrate_executes_handler(void);
+void test_cli_dispatch_db_create_executes_handler(void);
+void test_forge_new_creates_project_directory(void);
+void test_forge_new_creates_main_c_and_makefile(void);
+void test_cli_dispatch_new_creates_project(void);
+void test_cli_server_starts_http_and_handles_health_route(void);
 
 void test_pulse_metrics_counts_and_times_requests_and_ai_calls(void);
 void test_pulse_trace_measures_elapsed_time_and_updates_metrics(void);
@@ -275,13 +290,30 @@ static void run_all_tests(void) {
     test_guard_auth_basic_success_and_failure();
 
     test_forge_generate_controller_creates_file();
+    test_forge_generate_controller_users_creates_file_and_stub();
     test_forge_generate_model_creates_file();
+    test_forge_generate_model_user_creates_file_with_fields_and_active_record();
     test_forge_generate_neural_model_creates_file();
+    test_forge_scaffold_creates_model_controller_routes_fields_and_route();
+
+    test_db_create_creates_db_folder_and_storage_file();
+    test_db_migrate_runs_pending_and_tracks_executed();
+    test_db_migration_generator_creates_timestamped_file_with_up_down();
 
     test_cli_parse_server_command();
+    test_cli_parse_new_command();
     test_cli_parse_generate_controller_command();
+    test_cli_parse_db_migrate_command();
+    test_cli_parse_db_create_command();
     test_cli_parse_invalid_command_fails();
     test_cli_dispatch_generate_controller_executes_handler();
+    test_cli_dispatch_db_migrate_executes_handler();
+    test_cli_dispatch_db_create_executes_handler();
+    test_forge_new_creates_project_directory();
+    test_forge_new_creates_main_c_and_makefile();
+    test_cli_dispatch_new_creates_project();
+
+    test_cli_server_starts_http_and_handles_health_route();
 
     test_pulse_metrics_counts_and_times_requests_and_ai_calls();
     test_pulse_trace_measures_elapsed_time_and_updates_metrics();
