@@ -1,6 +1,7 @@
 #include "cli.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "../forge/forge_generators.h"
@@ -12,8 +13,14 @@
 #include "../action/action_router.h"
 #include "../config/routes.h"
 
+#include <unistd.h>
+
 #ifndef CORTEX_VERSION
 #define CORTEX_VERSION "0.0.0"
+#endif
+
+#ifndef CORTEX_SOURCE_ROOT
+#define CORTEX_SOURCE_ROOT "."
 #endif
 
 int cli_parse(int argc, char **argv, CliParsed *out) {
@@ -151,6 +158,25 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
 }
 
 static int cli_handle_server(void) {
+    /* If we are inside a generated project, delegate to project Makefile. */
+    if (access(".cortex_project", F_OK) == 0 &&
+        access("Makefile", F_OK) == 0 &&
+        access("config/routes.c", F_OK) == 0) {
+        char command[1024];
+        int rc;
+        printf("server: detected project mode\n");
+        if (snprintf(command, sizeof(command), "CORTEX_ROOT=\"%s\" make server", CORTEX_SOURCE_ROOT) < 0) {
+            fprintf(stderr, "server: failed to build project command\n");
+            return -1;
+        }
+        rc = system(command);
+        if (rc != 0) {
+            fprintf(stderr, "server: failed to build/run project server\n");
+            return -1;
+        }
+        return 0;
+    }
+
     ActionRouter router;
 
     action_router_init(&router);
@@ -197,6 +223,15 @@ static int cli_handle_generate_scaffold(const char *name, int attr_count, const 
     }
 
     printf("generate scaffold: creating '%s'\n", name);
+
+    /* Debug: show current working directory so we know where files are generated. */
+    {
+        char cwd[1024];
+        if (getcwd(cwd, sizeof(cwd)) != NULL) {
+            printf("generate scaffold: cwd='%s'\n", cwd);
+        }
+    }
+
     return forge_generate_scaffold(name, attr_count, attributes);
 }
 

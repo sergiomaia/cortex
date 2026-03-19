@@ -151,20 +151,19 @@ static void str_to_lower(const char *in, char *out, size_t out_size) {
     out[i] = '\0';
 }
 
-/* Generate <resource> scaffold with field setters + route registration. */
+/* Generate <resource> scaffold with model/controller/views/routes files. */
 int forge_generate_scaffold(const char *resource_name, int attr_count, const char **attributes) {
     char resource[64];
     char resource_plural[64];
     char type_name[64];
     char macro_name[64];
     char path[256];
-
+    char views_dir[256];
     char model_buf[4096];
-    char routes_buf[1024];
     char controller_buf[2048];
-
+    char routes_buf[4096];
     int i;
-    size_t len;
+    size_t len = 0;
 
     if (!resource_name || resource_name[0] == '\0') return -1;
     if (attr_count < 0) return -1;
@@ -172,232 +171,207 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
 
     str_to_lower(resource_name, resource, sizeof(resource));
     if (resource[0] == '\0') return -1;
-
-    /* Minimal pluralization: append 's'. */
     if (snprintf(resource_plural, sizeof(resource_plural), "%ss", resource) < 0) return -1;
-
-    /* Derive type name (capitalize first letter) and macro name (uppercase). */
     model_type_name(resource, type_name, sizeof(type_name));
     model_macro_name(resource, macro_name, sizeof(macro_name));
 
-    /* Ensure app + subdirs exist. */
     if (ensure_dir("app") != 0) return -1;
     if (ensure_dir("app/models") != 0) return -1;
     if (ensure_dir("app/controllers") != 0) return -1;
+    if (ensure_dir("app/views") != 0) return -1;
+    if (snprintf(views_dir, sizeof(views_dir), "app/views/%s", resource_plural) < 0) return -1;
+    if (ensure_dir(views_dir) != 0) return -1;
+    if (ensure_dir("config") != 0) return -1;
 
-    /* 1) Model with field setter stubs. */
+    /* model */
     if (snprintf(path, sizeof(path), "app/models/%s.c", resource) < 0) return -1;
-
-    len = 0;
-    len += (size_t)snprintf(model_buf + len, sizeof(model_buf) - len,
-                             "/* Auto-generated scaffold model: %s */\n"
-                             "#include \"core/active_record.h\"\n"
-                             "#include \"core/active_model.h\"\n\n"
-                             "#define %s_MODEL_NAME \"%s\"\n\n"
-                             "typedef ActiveModel %s;\n\n",
-                             resource, macro_name, resource, type_name);
-
-    len += (size_t)snprintf(model_buf + len, sizeof(model_buf) - len,
-                             "%s *%s_create(ActiveRecordStore *store) {\n"
-                             "    return active_record_create(store, %s_MODEL_NAME);\n"
-                             "}\n\n",
-                             type_name, resource, macro_name);
-
+    len = (size_t)snprintf(model_buf, sizeof(model_buf),
+                           "/* Auto-generated scaffold model: %s */\n"
+                           "#include \"core/active_record.h\"\n"
+                           "#include \"core/active_model.h\"\n\n"
+                           "#define %s_MODEL_NAME \"%s\"\n\n"
+                           "typedef ActiveModel %s;\n\n"
+                           "%s *%s_create(ActiveRecordStore *store) {\n"
+                           "    return active_record_create(store, %s_MODEL_NAME);\n"
+                           "}\n\n",
+                           resource, macro_name, resource, type_name, type_name, resource, macro_name);
+    if (len >= sizeof(model_buf)) return -1;
     for (i = 0; i < attr_count; ++i) {
         const char *attr = attributes[i];
-        const char *colon;
+        const char *colon = strchr(attr, ':');
         char key[64];
-        char val_name[64];
-
+        char field[64];
+        size_t klen;
         if (!attr) return -1;
-        colon = strchr(attr, ':');
-
         if (!colon) {
-            /* No type given; treat whole token as key. */
             if (snprintf(key, sizeof(key), "%s", attr) < 0) return -1;
         } else {
-            size_t klen = (size_t)(colon - attr);
+            klen = (size_t)(colon - attr);
             if (klen >= sizeof(key)) klen = sizeof(key) - 1;
             memcpy(key, attr, klen);
             key[klen] = '\0';
         }
-
-        str_to_lower(key, val_name, sizeof(val_name));
-
-        /* Best-effort: only valid identifier-ish field names are supported. */
-        if (val_name[0] == '\0') return -1;
-
+        str_to_lower(key, field, sizeof(field));
         len += (size_t)snprintf(model_buf + len, sizeof(model_buf) - len,
-                                 "int %s_set_%s(%s *m, const char *%s) {\n"
-                                 "    return active_model_set_field(m, \"%s\", %s);\n"
-                                 "}\n\n",
-                                 resource, val_name, type_name, val_name, val_name, val_name);
-
-        if ((int)len >= (int)sizeof(model_buf) - 1) return -1;
+                                "int %s_set_%s(%s *m, const char *%s) {\n"
+                                "    return active_model_set_field(m, \"%s\", %s);\n"
+                                "}\n\n",
+                                resource, field, type_name, field, field, field);
+        if (len >= sizeof(model_buf)) return -1;
     }
+    printf("forge_scaffold: generating model at '%s'\n", path);
+    if (write_template_file(path, model_buf) != 0) { perror("forge_scaffold model"); return -1; }
 
-    if (write_template_file(path, model_buf) != 0) return -1;
-
-    /* 2) Controller (resource plural) with CRUD actions + route auto-registration helper. */
+    /* controller */
     if (snprintf(path, sizeof(path), "app/controllers/%s_controller.c", resource_plural) < 0) return -1;
-
     if (snprintf(controller_buf, sizeof(controller_buf),
                  "/* Auto-generated scaffold controller: %s */\n"
                  "#include \"action_controller.h\"\n"
-                 "#include \"action_router.h\"\n"
-                 "#include \"core/active_record.h\"\n"
-                 "#include \"core/active_model.h\"\n\n"
-                 "static ActiveRecordStore %s_store;\n"
-                 "static int %s_store_initialized = 0;\n\n"
-                 "static void %s_store_ensure_initialized(void) {\n"
-                 "    if (!%s_store_initialized) {\n"
-                 "        active_record_init(&%s_store);\n"
-                 "        %s_store_initialized = 1;\n"
-                 "    }\n"
-                 "}\n\n"
-                 "static int %s_parse_id(const char *path) {\n"
-                 "    const char *slash = NULL;\n"
-                 "    int id = 0;\n"
-                 "    if (!path) return 0;\n"
-                 "    slash = strrchr(path, '/');\n"
-                 "    if (!slash || *(slash + 1) == '\\0') return 0;\n"
-                 "    id = atoi(slash + 1);\n"
-                 "    if (id <= 0) return 0;\n"
-                 "    return id;\n"
-                 "}\n\n"
-                 "/* Legacy handler kept for compatibility; delegates to index. */\n"
-                 "void %s_controller_handle(ActionRequest *req, ActionResponse *res) {\n"
-                 "    (void)req;\n"
-                 "    %s_store_ensure_initialized();\n"
-                 "    action_controller_render_json(res, 200, \"[]\");\n"
-                 "}\n\n"
-                 "static void %s_index(ActionRequest *req, ActionResponse *res) {\n"
-                 "    (void)req;\n"
-                 "    %s_store_ensure_initialized();\n"
-                 "    action_controller_render_json(res, 200, \"[]\");\n"
-                 "}\n\n"
-                 "static void %s_show(ActionRequest *req, ActionResponse *res) {\n"
-                 "    int id;\n"
-                 "    ActiveModel *m;\n"
-                 "    %s_store_ensure_initialized();\n"
-                 "    id = %s_parse_id(req->path);\n"
-                 "    if (id <= 0) {\n"
-                 "        action_controller_render_json(res, 404, \"{}\\n\");\n"
-                 "        return;\n"
-                 "    }\n"
-                 "    m = active_record_find(&%s_store, id);\n"
-                 "    if (!m) {\n"
-                 "        action_controller_render_json(res, 404, \"{}\\n\");\n"
-                 "        return;\n"
-                 "    }\n"
-                 "    (void)m;\n"
-                 "    action_controller_render_json(res, 200, \"{}\\n\");\n"
-                 "}\n\n"
-                 "static void %s_create(ActionRequest *req, ActionResponse *res) {\n"
-                 "    ActiveModel *m;\n"
-                 "    (void)req;\n"
-                 "    %s_store_ensure_initialized();\n"
-                 "    m = active_record_create(&%s_store, \"%s\");\n"
-                 "    if (!m) {\n"
-                 "        action_controller_render_json(res, 500, \"{}\\n\");\n"
-                 "        return;\n"
-                 "    }\n"
-                 "    action_controller_render_json(res, 201, \"{}\\n\");\n"
-                 "}\n\n"
-                 "static void %s_update(ActionRequest *req, ActionResponse *res) {\n"
-                 "    int id;\n"
-                 "    ActiveModel *m;\n"
-                 "    (void)req;\n"
-                 "    %s_store_ensure_initialized();\n"
-                 "    id = %s_parse_id(req->path);\n"
-                 "    if (id <= 0) {\n"
-                 "        action_controller_render_json(res, 404, \"{}\\n\");\n"
-                 "        return;\n"
-                 "    }\n"
-                 "    m = active_record_find(&%s_store, id);\n"
-                 "    if (!m) {\n"
-                 "        action_controller_render_json(res, 404, \"{}\\n\");\n"
-                 "        return;\n"
-                 "    }\n"
-                 "    (void)m;\n"
-                 "    action_controller_render_json(res, 200, \"{}\\n\");\n"
-                 "}\n\n"
-                 "static void %s_delete(ActionRequest *req, ActionResponse *res) {\n"
-                 "    int id;\n"
-                 "    int rc;\n"
-                 "    %s_store_ensure_initialized();\n"
-                 "    id = %s_parse_id(req->path);\n"
-                 "    if (id <= 0) {\n"
-                 "        action_controller_render_json(res, 404, \"{}\\n\");\n"
-                 "        return;\n"
-                 "    }\n"
-                 "    rc = active_record_delete(&%s_store, id);\n"
-                 "    if (rc != 0) {\n"
-                 "        action_controller_render_json(res, 404, \"{}\\n\");\n"
-                 "        return;\n"
-                 "    }\n"
-                 "    action_controller_render_json(res, 200, \"{}\\n\");\n"
-                 "}\n\n"
-                 "void %s_controller_register(ActionRouter *router) {\n"
-                 "    if (!router) return;\n"
-                 "    /* Rails-style CRUD routes. */\n"
-                 "    action_router_add_route(router, \"GET\", \"/%s\", %s_index);\n"
-                 "    action_router_add_route(router, \"GET\", \"/%s/:id\", %s_show);\n"
-                 "    action_router_add_route(router, \"POST\", \"/%s\", %s_create);\n"
-                 "    action_router_add_route(router, \"PUT\", \"/%s/:id\", %s_update);\n"
-                 "    action_router_add_route(router, \"DELETE\", \"/%s/:id\", %s_delete);\n"
-                 "}\n",
+                 "#include \"action_view.h\"\n\n"
+                 "void %s_index(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/index\"); }\n"
+                 "void %s_show(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/show\"); }\n"
+                 "void %s_new(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/new\"); }\n"
+                 "void %s_edit(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/edit\"); }\n"
+                 "void %s_create(ActionRequest *req, ActionResponse *res) { (void)req; action_controller_render_text(res, 201, \"created\"); }\n"
+                 "void %s_update(ActionRequest *req, ActionResponse *res) { (void)req; action_controller_render_text(res, 200, \"updated\"); }\n"
+                 "void %s_delete(ActionRequest *req, ActionResponse *res) { (void)req; action_controller_render_text(res, 200, \"deleted\"); }\n",
                  resource_plural,
-                 resource, resource,
-                 resource, resource, resource, resource,
-                 resource,
-                 resource_plural, resource,
-                 resource_plural, resource,
-                 resource_plural, resource, resource,
-                 resource_plural, resource, resource,
-                 resource_plural, resource, resource,
-                 resource_plural, resource, resource,
-                 resource_plural, resource_plural, resource_plural, resource_plural, resource_plural, resource_plural) < 0) {
-        return -1;
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural, resource_plural) < 0) return -1;
+    printf("forge_scaffold: generating controller at '%s'\n", path);
+    if (write_template_file(path, controller_buf) != 0) { perror("forge_scaffold controller"); return -1; }
+
+    /* views */
+    {
+        char view_buf[512];
+        if (snprintf(path, sizeof(path), "%s/index.html", views_dir) < 0) return -1;
+        if (snprintf(view_buf, sizeof(view_buf),
+                     "<h1>%s</h1>\n"
+                     "<ul><li>Sample item</li></ul>\n"
+                     "<a href=\"/%s/new\">New</a>\n",
+                     resource_plural, resource_plural) < 0) return -1;
+        if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold index"); return -1; }
+
+        if (snprintf(path, sizeof(path), "%s/show.html", views_dir) < 0) return -1;
+        if (snprintf(view_buf, sizeof(view_buf),
+                     "<h1>Show %s</h1>\n"
+                     "<p>Sample details</p>\n"
+                     "<a href=\"/%s\">Back</a>\n",
+                     resource, resource_plural) < 0) return -1;
+        if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold show"); return -1; }
+
+        if (snprintf(path, sizeof(path), "%s/new.html", views_dir) < 0) return -1;
+        if (snprintf(view_buf, sizeof(view_buf),
+                     "<h1>New %s</h1>\n"
+                     "<form method=\"POST\" action=\"/%s\">\n"
+                     "  <button type=\"submit\">Create</button>\n"
+                     "</form>\n",
+                     resource, resource_plural) < 0) return -1;
+        if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold new"); return -1; }
+
+        if (snprintf(path, sizeof(path), "%s/edit.html", views_dir) < 0) return -1;
+        if (snprintf(view_buf, sizeof(view_buf),
+                     "<h1>Edit %s</h1>\n"
+                     "<form method=\"POST\" action=\"/%s/1\">\n"
+                     "  <button type=\"submit\">Update</button>\n"
+                     "</form>\n",
+                     resource, resource_plural) < 0) return -1;
+        if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold edit"); return -1; }
     }
-    if (write_template_file(path, controller_buf) != 0) return -1;
 
-    /* 3) Routes file. */
-    if (snprintf(path, sizeof(path), "app/routes.c") < 0) return -1;
+    /* routes */
+    if (snprintf(path, sizeof(path), "config/routes.c") < 0) return -1;
+    if (snprintf(routes_buf, sizeof(routes_buf),
+                 "#include \"config/routes.h\"\n"
+                 "#include \"../action/action_request.h\"\n"
+                 "#include \"../action/action_response.h\"\n\n"
+                 "void %s_index(ActionRequest *req, ActionResponse *res);\n"
+                 "void %s_show(ActionRequest *req, ActionResponse *res);\n"
+                 "void %s_new(ActionRequest *req, ActionResponse *res);\n"
+                 "void %s_edit(ActionRequest *req, ActionResponse *res);\n"
+                 "void %s_create(ActionRequest *req, ActionResponse *res);\n"
+                 "void %s_update(ActionRequest *req, ActionResponse *res);\n"
+                 "void %s_delete(ActionRequest *req, ActionResponse *res);\n\n"
+                 "void home_index(ActionRequest *req, ActionResponse *res);\n\n"
+                 "void app_register_routes(ActionRouter *router) {\n"
+                 "    if (!router) return;\n"
+                 "    route_get(router, \"/\", home_index);\n"
+                 "    route_get(router, \"/%s\", %s_index);\n"
+                 "    route_get(router, \"/%s/:id\", %s_show);\n"
+                 "    route_get(router, \"/%s/new\", %s_new);\n"
+                 "    route_get(router, \"/%s/:id/edit\", %s_edit);\n"
+                 "    route_post(router, \"/%s\", %s_create);\n"
+                 "    route_put(router, \"/%s/:id\", %s_update);\n"
+                 "    route_delete(router, \"/%s/:id\", %s_delete);\n"
+                 "}\n",
+                 resource_plural, resource_plural, resource_plural, resource_plural, resource_plural, resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural) < 0) return -1;
+    printf("forge_scaffold: updating routes in '%s'\n", path);
+    if (write_template_file(path, routes_buf) != 0) { perror("forge_scaffold routes"); return -1; }
 
-    len = 0;
-    len += (size_t)snprintf(routes_buf + len, sizeof(routes_buf) - len,
-                             "/* Auto-generated routes */\n"
-                             "#include \"action_router.h\"\n\n"
-                             "void %s_controller_register(ActionRouter *router);\n\n"
-                             "void app_routes_register(ActionRouter *router) {\n"
-                             "    %s_controller_register(router);\n"
-                             "}\n",
-                             resource_plural, resource_plural);
-
-    return write_template_file(path, routes_buf);
+    return 0;
 }
 
 int forge_new_project(const char *project_name) {
     char path[320];
     const char *main_content =
-        "/* Cortex app - minimal entrypoint */\n"
-        "#include <stdio.h>\n\n"
+        "/* Cortex app server entrypoint */\n"
+        "#include <stdio.h>\n"
+        "#include \"action/action_dispatch.h\"\n"
+        "#include \"action/action_router.h\"\n"
+        "#include \"config/routes.h\"\n\n"
+        "void app_register_routes(ActionRouter *router);\n\n"
         "int main(int argc, char **argv) {\n"
         "    (void)argc;\n"
         "    (void)argv;\n"
-        "    printf(\"Cortex app\\n\");\n"
-        "    return 0;\n"
+        "    ActionRouter router;\n"
+        "    action_router_init(&router);\n"
+        "    app_register_routes(&router);\n"
+        "    printf(\"Listening on http://localhost:3000\\n\");\n"
+        "    return action_dispatch_serve_http(&router);\n"
         "}\n";
     const char *makefile_content =
         "CC := gcc\n"
-        "CFLAGS := -Wall -Wextra -std=c11\n\n"
-        "main: main.c\n"
-        "\t$(CC) $(CFLAGS) -o main main.c\n\n"
-        ".PHONY: all clean\n"
-        "all: main\n"
+        "CORTEX_ROOT ?= ..\n"
+        "CFLAGS := -Wall -Wextra -std=c11 -I. -I$(CORTEX_ROOT) -I$(CORTEX_ROOT)/core -I$(CORTEX_ROOT)/action -I$(CORTEX_ROOT)/config\n"
+        "APP_SRCS := main.c config/routes.c $(wildcard app/controllers/*.c) $(wildcard app/models/*.c) $(wildcard app/neural/*.c)\n\n"
+        "cortex_app: $(APP_SRCS)\n"
+        "\t$(CC) $(CFLAGS) $(APP_SRCS) -L$(CORTEX_ROOT) -lcortex -lm -o cortex_app\n\n"
+        ".PHONY: all clean server\n"
+        "all: cortex_app\n"
+        "server: cortex_app\n"
+        "\t./cortex_app\n"
         "clean:\n"
-        "\trm -f main\n";
+        "\trm -f cortex_app\n";
+    const char *routes_content =
+        "#include \"config/routes.h\"\n"
+        "#include \"../action/action_request.h\"\n"
+        "#include \"../action/action_response.h\"\n\n"
+        "void home_index(ActionRequest *req, ActionResponse *res);\n\n"
+        "void app_register_routes(ActionRouter *router) {\n"
+        "    if (!router) return;\n"
+        "    route_get(router, \"/\", home_index);\n"
+        "}\n";
+    const char *home_controller_content =
+        "#include \"action_controller.h\"\n"
+        "#include \"action_view.h\"\n\n"
+        "void home_index(ActionRequest *req, ActionResponse *res) {\n"
+        "    (void)req;\n"
+        "    render_view(res, \"home/index\");\n"
+        "}\n";
+    const char *home_view_content =
+        "<h1>Welcome to Cortex</h1>\n";
+    const char *project_marker_content =
+        "cortex_project=1\n";
 
     if (!project_name || project_name[0] == '\0') {
         return -1;
@@ -423,6 +397,36 @@ int forge_new_project(const char *project_name) {
     if (snprintf(path, sizeof(path), "%s/db", project_name) < 0) {
         return -1;
     }
+    if (snprintf(path, sizeof(path), "%s/app/controllers", project_name) < 0) {
+        return -1;
+    }
+    if (ensure_dir(path) != 0) {
+        return -1;
+    }
+    if (snprintf(path, sizeof(path), "%s/app/views", project_name) < 0) {
+        return -1;
+    }
+    if (ensure_dir(path) != 0) {
+        return -1;
+    }
+    if (snprintf(path, sizeof(path), "%s/app/views/home", project_name) < 0) {
+        return -1;
+    }
+    if (ensure_dir(path) != 0) {
+        return -1;
+    }
+    if (snprintf(path, sizeof(path), "%s/app/models", project_name) < 0) {
+        return -1;
+    }
+    if (ensure_dir(path) != 0) {
+        return -1;
+    }
+    if (snprintf(path, sizeof(path), "%s/app/neural", project_name) < 0) {
+        return -1;
+    }
+    if (ensure_dir(path) != 0) {
+        return -1;
+    }
     if (ensure_dir(path) != 0) {
         return -1;
     }
@@ -436,6 +440,30 @@ int forge_new_project(const char *project_name) {
         return -1;
     }
     if (write_template_file(path, makefile_content) != 0) {
+        return -1;
+    }
+    if (snprintf(path, sizeof(path), "%s/config/routes.c", project_name) < 0) {
+        return -1;
+    }
+    if (write_template_file(path, routes_content) != 0) {
+        return -1;
+    }
+    if (snprintf(path, sizeof(path), "%s/app/controllers/home_controller.c", project_name) < 0) {
+        return -1;
+    }
+    if (write_template_file(path, home_controller_content) != 0) {
+        return -1;
+    }
+    if (snprintf(path, sizeof(path), "%s/app/views/home/index.html", project_name) < 0) {
+        return -1;
+    }
+    if (write_template_file(path, home_view_content) != 0) {
+        return -1;
+    }
+    if (snprintf(path, sizeof(path), "%s/.cortex_project", project_name) < 0) {
+        return -1;
+    }
+    if (write_template_file(path, project_marker_content) != 0) {
         return -1;
     }
     return 0;

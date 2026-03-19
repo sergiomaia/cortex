@@ -1,6 +1,6 @@
 CC := gcc
 VERSION := $(strip $(file <VERSION))
-CFLAGS := -Wall -Wextra -std=c11 -I. -Icore -Iaction -Iflow -Icache -Iguard -Iforge -Iconfig -DCORTEX_VERSION=\"$(VERSION)\"
+CFLAGS := -Wall -Wextra -std=c11 -I. -Icore -Iaction -Iflow -Icache -Iguard -Iforge -Iconfig -DCORTEX_VERSION=\"$(VERSION)\" -DCORTEX_SOURCE_ROOT=\"$(CURDIR)\"
 
 CORE_SRCS := $(wildcard core/*.c)
 ACTION_SRCS := $(wildcard action/*.c)
