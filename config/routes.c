@@ -1,12 +1,11 @@
 #include "routes.h"
 
 #include "../action/action_controller.h"
+#include "../action/action_request.h"
+#include "../action/action_response.h"
 
-/* Root welcome page handler (HTML). */
-static void root_welcome_controller(ActionRequest *req, ActionResponse *res) {
-    (void)req;
-    action_controller_render_text(res, 200, "Welcome to Cortex");
-}
+/* Default Home controller action (defined in app/controllers/home_controller.c). */
+void home_index(ActionRequest *req, ActionResponse *res);
 
 /* Simple health endpoint for server health checks. */
 static void health_controller(ActionRequest *req, ActionResponse *res) {
@@ -14,15 +13,33 @@ static void health_controller(ActionRequest *req, ActionResponse *res) {
     action_controller_render_text(res, 200, "OK");
 }
 
+int route_get(ActionRouter *router, const char *path, ActionHandler handler) {
+    return action_router_add_route(router, "GET", path, handler);
+}
+
+int route_post(ActionRouter *router, const char *path, ActionHandler handler) {
+    return action_router_add_route(router, "POST", path, handler);
+}
+
+int route_put(ActionRouter *router, const char *path, ActionHandler handler) {
+    return action_router_add_route(router, "PUT", path, handler);
+}
+
+int route_delete(ActionRouter *router, const char *path, ActionHandler handler) {
+    return action_router_add_route(router, "DELETE", path, handler);
+}
+
 void register_routes(ActionRouter *router) {
     if (!router) {
         return;
     }
 
-    /* Default root welcome page. */
-    (void)action_router_add_route(router, "GET", "/", root_welcome_controller);
+    /* Default root route – developers can change this in config/routes.c. */
+    route_get(router, "/", home_index);
 
     /* Built-in health check. */
-    (void)action_router_add_route(router, "GET", "/health", health_controller);
+    route_get(router, "/health", health_controller);
+
+    /* Application scaffold routes will be appended here by generators. */
 }
 

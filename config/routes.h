@@ -3,16 +3,14 @@
 
 #include "../action/action_router.h"
 
-/* Register all framework routes on the given router.
- *
- * This always includes:
- *   - GET "/"       → HTML welcome page
- *   - GET "/health" → simple health check
- *
- * Applications can extend this by adding their own routes directly
- * to the router before starting the HTTP server.
- */
+/* Register all framework + application routes on the given router. */
 void register_routes(ActionRouter *router);
+
+/* Lightweight helpers for defining routes in a Rails-like style. */
+int route_get(ActionRouter *router, const char *path, ActionHandler handler);
+int route_post(ActionRouter *router, const char *path, ActionHandler handler);
+int route_put(ActionRouter *router, const char *path, ActionHandler handler);
+int route_delete(ActionRouter *router, const char *path, ActionHandler handler);
 
 #endif /* CONFIG_ROUTES_H */
 

@@ -39,6 +39,7 @@ int action_dispatch_serve_http(ActionRouter *router) {
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
+        perror("action_dispatch_serve_http: socket failed");
         return -1;
     }
 
@@ -48,11 +49,13 @@ int action_dispatch_serve_http(ActionRouter *router) {
     addr.sin_port = htons(3000);
 
     if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        perror("action_dispatch_serve_http: bind failed");
         close(server_fd);
         return -1;
     }
 
     if (listen(server_fd, 8) < 0) {
+        perror("action_dispatch_serve_http: listen failed");
         close(server_fd);
         return -1;
     }
@@ -90,6 +93,7 @@ int action_dispatch_serve_http(ActionRouter *router) {
 
         res.status = 200;
         res.body = "OK";
+        res.content_type = "text/plain";
 
         action_dispatch(router, &req, &res);
 
@@ -101,13 +105,18 @@ int action_dispatch_serve_http(ActionRouter *router) {
             status_text = "Internal Server Error";
         }
 
+        if (!res.content_type) {
+            res.content_type = "text/plain";
+        }
+
         snprintf(response, sizeof(response),
                  "HTTP/1.1 %d %s\r\n"
-                 "Content-Type: text/plain\r\n"
+                 "Content-Type: %s\r\n"
                  "Connection: close\r\n"
                  "\r\n"
                  "%s",
                  res.status, status_text,
+                 res.content_type,
                  res.body ? res.body : "");
 
         write(client_fd, response, strlen(response));

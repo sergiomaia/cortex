@@ -111,17 +111,20 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
 
     const char *model_path = "app/models/post.c";
     const char *controller_path = "app/controllers/posts_controller.c";
-    const char *routes_path = "app/routes.c";
+    const char *routes_path = "config/routes.c";
+    const char *view_index_path = "app/views/posts/index.html";
 
     remove_if_exists(model_path);
     remove_if_exists(controller_path);
     remove_if_exists(routes_path);
+    remove_if_exists(view_index_path);
 
     ASSERT_EQ(forge_generate_scaffold("Post", attr_count, attrs), 0);
 
     ASSERT_TRUE(file_exists(model_path));
     ASSERT_TRUE(file_exists(controller_path));
     ASSERT_TRUE(file_exists(routes_path));
+    ASSERT_TRUE(file_exists(view_index_path));
 
     /* Fields should be parsed into active_model_set_field calls. */
     ASSERT_TRUE(file_contains(model_path, "post_set_title"));
@@ -136,11 +139,12 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_contains(controller_path, "\"/posts\""));
 
     /* Routes should auto-register via controller register helper. */
-    ASSERT_TRUE(file_contains(routes_path, "app_routes_register"));
+    ASSERT_TRUE(file_contains(routes_path, "app_register_routes"));
     ASSERT_TRUE(file_contains(routes_path, "posts_controller_register"));
 
     remove_if_exists(model_path);
     remove_if_exists(controller_path);
     remove_if_exists(routes_path);
+    remove_if_exists(view_index_path);
 }
  
