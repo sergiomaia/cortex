@@ -1,5 +1,6 @@
 CC := gcc
-CFLAGS := -Wall -Wextra -std=c11 -I. -Icore -Iaction -Iflow -Icache -Iguard -Iforge
+VERSION := $(strip $(file <VERSION))
+CFLAGS := -Wall -Wextra -std=c11 -I. -Icore -Iaction -Iflow -Icache -Iguard -Iforge -Iconfig -DCORTEX_VERSION=\"$(VERSION)\"
 
 CORE_SRCS := $(wildcard core/*.c)
 ACTION_SRCS := $(wildcard action/*.c)
@@ -9,13 +10,14 @@ GUARD_SRCS := $(wildcard guard/*.c)
 FORGE_SRCS := $(wildcard forge/*.c)
 DB_SRCS := $(wildcard db/*.c)
 APP_SRCS := $(wildcard app/*/*.c) $(wildcard app/*/*/*.c)
+CONFIG_SRCS := $(wildcard config/*.c)
 
 # Provide an executable entrypoint, but keep the static library unchanged.
 # `cli/cortex_main.c` is linked into the `cortex` binary only (not archived into libcortex.a).
 CLI_MAIN_SRC := cli/cortex_main.c
 CLI_SRCS := $(filter-out $(CLI_MAIN_SRC), $(wildcard cli/*.c))
 
-SRCS := $(CORE_SRCS) $(ACTION_SRCS) $(FLOW_SRCS) $(CACHE_SRCS) $(GUARD_SRCS) $(FORGE_SRCS) $(DB_SRCS) $(CLI_SRCS) $(APP_SRCS)
+SRCS := $(CORE_SRCS) $(ACTION_SRCS) $(FLOW_SRCS) $(CACHE_SRCS) $(GUARD_SRCS) $(FORGE_SRCS) $(DB_SRCS) $(CLI_SRCS) $(APP_SRCS) $(CONFIG_SRCS)
 OBJS := $(SRCS:.c=.o)
 
 TEST_SRCS := tests/test_runner.c \
@@ -23,6 +25,7 @@ TEST_SRCS := tests/test_runner.c \
              tests/core/test_core_app.c \
              tests/core/test_core_logger.c \
              tests/core/test_core_config.c \
+             tests/core/test_routes.c \
              tests/core/test_neural_runtime.c \
              tests/core/test_neural_prompt.c \
              tests/core/test_incident_summary.c \

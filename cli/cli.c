@@ -10,6 +10,11 @@
 #include "../action/action_dispatch.h"
 #include "../action/action_controller.h"
 #include "../action/action_router.h"
+#include "../config/routes.h"
+
+#ifndef CORTEX_VERSION
+#define CORTEX_VERSION "0.0.0"
+#endif
 
 int cli_parse(int argc, char **argv, CliParsed *out) {
     if (!out || argc < 2) {
@@ -22,6 +27,14 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
     out->attribute_count = 0;
 
     /* argv[0] is the program name, argv[1] is the first word. */
+    if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "version") == 0) {
+        if (argc != 2) {
+            return -1;
+        }
+        out->command = CLI_COMMAND_VERSION;
+        return 0;
+    }
+
     if (strcmp(argv[1], "server") == 0) {
         if (argc != 2) {
             return -1;
@@ -141,19 +154,11 @@ static int cli_handle_server(void) {
     ActionRouter router;
 
     action_router_init(&router);
-
-    /* Minimal health endpoint so the server does something useful. */
-    void health_controller(ActionRequest *req, ActionResponse *res) {
-        (void)req;
-        action_controller_render_text(res, 200, "OK");
-    }
-
-    if (action_router_add_route(&router, "GET", "/health", health_controller) != 0) {
-        fprintf(stderr, "failed to register /health route\n");
-        return -1;
-    }
+    register_routes(&router);
 
     printf("server: starting (listening until stopped)\n");
+    printf("Listening on http://localhost:3000\n");
+    printf("Use Ctrl-C to stop\n");
     return action_dispatch_serve_http(&router);
 }
 
@@ -206,12 +211,19 @@ static int cli_handle_db_create(void) {
     return db_create("db/storage.json");
 }
 
+static int cli_handle_version(void) {
+    printf("cortex %s\n", CORTEX_VERSION);
+    return 0;
+}
+
 int cli_dispatch(const CliParsed *parsed) {
     if (!parsed) {
         return -1;
     }
 
     switch (parsed->command) {
+    case CLI_COMMAND_VERSION:
+        return cli_handle_version();
     case CLI_COMMAND_SERVER:
         return cli_handle_server();
     case CLI_COMMAND_NEW:
@@ -233,12 +245,15 @@ int cli_run(int argc, char **argv) {
     CliParsed parsed;
     if (cli_parse(argc, argv, &parsed) != 0) {
         fprintf(stderr, "Usage:\n");
+        fprintf(stderr, "  %s --version\n", argv[0]);
+        fprintf(stderr, "  %s -v\n", argv[0]);
         fprintf(stderr, "  %s server\n", argv[0]);
         fprintf(stderr, "  %s new <project_name>\n", argv[0]);
         fprintf(stderr, "  %s generate <name>\n", argv[0]);
         fprintf(stderr, "  %s generate controller <name>\n", argv[0]);
         fprintf(stderr, "  %s generate scaffold <Name> field:type field:type\n", argv[0]);
         fprintf(stderr, "  %s db:migrate\n", argv[0]);
+        fprintf(stderr, "  %s db:create\n", argv[0]);
         return -1;
     }
     return cli_dispatch(&parsed);
