@@ -66,7 +66,6 @@ int action_dispatch_serve_http(ActionRouter *router) {
         char path[256] = {0};
         ActionRequest req;
         ActionResponse res;
-        char response[1024];
         const char *status_text;
 
         client_fd = accept(server_fd, (struct sockaddr *)&addr, &addrlen);
@@ -109,17 +108,22 @@ int action_dispatch_serve_http(ActionRouter *router) {
             res.content_type = "text/plain";
         }
 
-        snprintf(response, sizeof(response),
-                 "HTTP/1.1 %d %s\r\n"
-                 "Content-Type: %s\r\n"
-                 "Connection: close\r\n"
-                 "\r\n"
-                 "%s",
-                 res.status, status_text,
-                 res.content_type,
-                 res.body ? res.body : "");
+        const char *body = res.body ? res.body : "";
+        size_t body_len = strlen(body);
 
-        write(client_fd, response, strlen(response));
+        char header[512];
+        int header_len = snprintf(header, sizeof(header),
+                                   "HTTP/1.1 %d %s\r\n"
+                                   "Content-Type: %s\r\n"
+                                   "Connection: close\r\n"
+                                   "\r\n",
+                                   res.status, status_text, res.content_type);
+        if (header_len > 0) {
+            write(client_fd, header, (size_t)header_len);
+        }
+        if (body_len > 0) {
+            write(client_fd, body, body_len);
+        }
         close(client_fd);
     }
 
