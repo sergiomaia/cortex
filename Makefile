@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -Wall -Wextra -std=c11 -Icore -Iaction -Iflow -Icache -Iguard -Iforge
+CFLAGS := -Wall -Wextra -std=c11 -I. -Icore -Iaction -Iflow -Icache -Iguard -Iforge
 
 CORE_SRCS := $(wildcard core/*.c)
 ACTION_SRCS := $(wildcard action/*.c)
@@ -8,8 +8,14 @@ CACHE_SRCS := $(wildcard cache/*.c)
 GUARD_SRCS := $(wildcard guard/*.c)
 FORGE_SRCS := $(wildcard forge/*.c)
 DB_SRCS := $(wildcard db/*.c)
-CLI_SRCS := $(wildcard cli/*.c)
-SRCS := $(CORE_SRCS) $(ACTION_SRCS) $(FLOW_SRCS) $(CACHE_SRCS) $(GUARD_SRCS) $(FORGE_SRCS) $(DB_SRCS) $(CLI_SRCS)
+APP_SRCS := $(wildcard app/*/*.c) $(wildcard app/*/*/*.c)
+
+# Provide an executable entrypoint, but keep the static library unchanged.
+# `cli/cortex_main.c` is linked into the `cortex` binary only (not archived into libcortex.a).
+CLI_MAIN_SRC := cli/cortex_main.c
+CLI_SRCS := $(filter-out $(CLI_MAIN_SRC), $(wildcard cli/*.c))
+
+SRCS := $(CORE_SRCS) $(ACTION_SRCS) $(FLOW_SRCS) $(CACHE_SRCS) $(GUARD_SRCS) $(FORGE_SRCS) $(DB_SRCS) $(CLI_SRCS) $(APP_SRCS)
 OBJS := $(SRCS:.c=.o)
 
 TEST_SRCS := tests/test_runner.c \
@@ -54,11 +60,13 @@ TEST_SRCS := tests/test_runner.c \
              tests/cli/test_cli_server.c
 TEST_BIN := tests/test_runner
 
+EXE := cortex
 LIB := libcortex.a
+MAIN_OBJ := $(CLI_MAIN_SRC:.c=.o)
 
 .PHONY: all clean test
 
-all: $(LIB)
+all: $(LIB) $(EXE)
 
 $(LIB): $(OBJS)
 	@rm -f $(LIB)
@@ -70,9 +78,12 @@ $(LIB): $(OBJS)
 $(TEST_BIN): $(LIB) $(TEST_SRCS)
 	$(CC) $(CFLAGS) $(TEST_SRCS) -L. -lcortex -lm -o $(TEST_BIN)
 
+$(EXE): $(LIB) $(MAIN_OBJ)
+	$(CC) $(CFLAGS) $(MAIN_OBJ) -L. -lcortex -lm -o $(EXE)
+
 test: $(TEST_BIN)
 	./$(TEST_BIN)
 
 clean:
-	rm -f $(OBJS) $(LIB) $(TEST_BIN)
+	rm -f $(OBJS) $(LIB) $(TEST_BIN) $(EXE) $(MAIN_OBJ)
 
