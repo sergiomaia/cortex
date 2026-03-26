@@ -151,6 +151,86 @@ static void str_to_lower(const char *in, char *out, size_t out_size) {
     out[i] = '\0';
 }
 
+/* Extract attribute key from "name:type" into out buffer. */
+static int parse_attribute_key(const char *attr, char *out, size_t out_size) {
+    const char *colon;
+    size_t klen;
+    if (!attr || !out || out_size == 0) return -1;
+    colon = strchr(attr, ':');
+    if (!colon) {
+        if (snprintf(out, out_size, "%s", attr) < 0) return -1;
+        return 0;
+    }
+    klen = (size_t)(colon - attr);
+    if (klen >= out_size) klen = out_size - 1;
+    memcpy(out, attr, klen);
+    out[klen] = '\0';
+    return 0;
+}
+
+/* Extract attribute type from "name:type" into out buffer (lowercase). */
+static int parse_attribute_type(const char *attr, char *out, size_t out_size) {
+    const char *colon;
+    size_t i = 0;
+    if (!out || out_size == 0) return -1;
+    out[0] = '\0';
+    if (!attr) return -1;
+    colon = strchr(attr, ':');
+    if (!colon || colon[1] == '\0') return 0;
+    ++colon;
+    while (colon[i] && i + 1 < out_size) {
+        out[i] = (char)tolower((unsigned char)colon[i]);
+        ++i;
+    }
+    out[i] = '\0';
+    return 0;
+}
+
+/* Append one scaffold form field to view_buf based on attribute type. */
+static int append_form_field(char *view_buf,
+                             size_t view_buf_size,
+                             size_t *view_len,
+                             const char *key,
+                             const char *field,
+                             const char *type) {
+    size_t appended;
+    if (!view_buf || !view_len || !key || !field || !type) return -1;
+
+    if (strcmp(type, "text") == 0) {
+        appended = (size_t)snprintf(view_buf + *view_len, view_buf_size - *view_len,
+                                    "  <div>\n"
+                                    "    <label for=\"%s\">%s</label>\n"
+                                    "    <textarea id=\"%s\" name=\"%s\"></textarea>\n"
+                                    "  </div>\n",
+                                    field, key, field, field);
+    } else if (strcmp(type, "boolean") == 0 || strcmp(type, "bool") == 0) {
+        appended = (size_t)snprintf(view_buf + *view_len, view_buf_size - *view_len,
+                                    "  <div>\n"
+                                    "    <label for=\"%s\">%s</label>\n"
+                                    "    <input type=\"checkbox\" id=\"%s\" name=\"%s\" />\n"
+                                    "  </div>\n",
+                                    field, key, field, field);
+    } else if (strcmp(type, "email") == 0 || strcmp(field, "email") == 0) {
+        appended = (size_t)snprintf(view_buf + *view_len, view_buf_size - *view_len,
+                                    "  <div>\n"
+                                    "    <label for=\"%s\">%s</label>\n"
+                                    "    <input type=\"email\" id=\"%s\" name=\"%s\" />\n"
+                                    "  </div>\n",
+                                    field, key, field, field);
+    } else {
+        appended = (size_t)snprintf(view_buf + *view_len, view_buf_size - *view_len,
+                                    "  <div>\n"
+                                    "    <label for=\"%s\">%s</label>\n"
+                                    "    <input type=\"text\" id=\"%s\" name=\"%s\" />\n"
+                                    "  </div>\n",
+                                    field, key, field, field);
+    }
+
+    *view_len += appended;
+    if (*view_len >= view_buf_size) return -1;
+    return 0;
+}
+
 /* Generate <resource> scaffold with model/controller/views/routes files. */
 int forge_generate_scaffold(const char *resource_name, int attr_count, const char **attributes) {
     char resource[64];
@@ -198,19 +278,10 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
     if (len >= sizeof(model_buf)) return -1;
     for (i = 0; i < attr_count; ++i) {
         const char *attr = attributes[i];
-        const char *colon = strchr(attr, ':');
         char key[64];
         char field[64];
-        size_t klen;
         if (!attr) return -1;
-        if (!colon) {
-            if (snprintf(key, sizeof(key), "%s", attr) < 0) return -1;
-        } else {
-            klen = (size_t)(colon - attr);
-            if (klen >= sizeof(key)) klen = sizeof(key) - 1;
-            memcpy(key, attr, klen);
-            key[klen] = '\0';
-        }
+        if (parse_attribute_key(attr, key, sizeof(key)) != 0) return -1;
         str_to_lower(key, field, sizeof(field));
         len += (size_t)snprintf(model_buf + len, sizeof(model_buf) - len,
                                 "int %s_set_%s(%s *m, const char *%s) {\n"
@@ -246,7 +317,8 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
 
     /* views */
     {
-        char view_buf[512];
+        char view_buf[4096];
+        size_t view_len = 0;
         if (snprintf(path, sizeof(path), "%s/index.html", views_dir) < 0) return -1;
         if (snprintf(view_buf, sizeof(view_buf),
                      "<h1>%s</h1>\n"
@@ -264,21 +336,50 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
         if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold show"); return -1; }
 
         if (snprintf(path, sizeof(path), "%s/new.html", views_dir) < 0) return -1;
-        if (snprintf(view_buf, sizeof(view_buf),
-                     "<h1>New %s</h1>\n"
-                     "<form method=\"POST\" action=\"/%s\">\n"
-                     "  <button type=\"submit\">Create</button>\n"
-                     "</form>\n",
-                     resource, resource_plural) < 0) return -1;
+        view_len = (size_t)snprintf(view_buf, sizeof(view_buf),
+                                    "<h1>New %s</h1>\n"
+                                    "<form method=\"POST\" action=\"/%s\">\n",
+                                    resource, resource_plural);
+        if (view_len >= sizeof(view_buf)) return -1;
+        for (i = 0; i < attr_count; ++i) {
+            const char *attr = attributes[i];
+            char key[64];
+            char field[64];
+            char type[32];
+            if (!attr) return -1;
+            if (parse_attribute_key(attr, key, sizeof(key)) != 0) return -1;
+            str_to_lower(key, field, sizeof(field));
+            if (parse_attribute_type(attr, type, sizeof(type)) != 0) return -1;
+            if (append_form_field(view_buf, sizeof(view_buf), &view_len, key, field, type) != 0) return -1;
+        }
+        view_len += (size_t)snprintf(view_buf + view_len, sizeof(view_buf) - view_len,
+                                     "  <button type=\"submit\">Create</button>\n"
+                                     "</form>\n");
+        if (view_len >= sizeof(view_buf)) return -1;
         if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold new"); return -1; }
 
         if (snprintf(path, sizeof(path), "%s/edit.html", views_dir) < 0) return -1;
-        if (snprintf(view_buf, sizeof(view_buf),
-                     "<h1>Edit %s</h1>\n"
-                     "<form method=\"POST\" action=\"/%s/1\">\n"
-                     "  <button type=\"submit\">Update</button>\n"
-                     "</form>\n",
-                     resource, resource_plural) < 0) return -1;
+        view_len = (size_t)snprintf(view_buf, sizeof(view_buf),
+                                    "<h1>Edit %s</h1>\n"
+                                    "<form method=\"POST\" action=\"/%s/1\">\n",
+                                    resource, resource_plural);
+        if (view_len >= sizeof(view_buf)) return -1;
+        for (i = 0; i < attr_count; ++i) {
+            const char *attr = attributes[i];
+            char key[64];
+            char field[64];
+            char type[32];
+            if (!attr) return -1;
+            if (parse_attribute_key(attr, key, sizeof(key)) != 0) return -1;
+            str_to_lower(key, field, sizeof(field));
+            if (parse_attribute_type(attr, type, sizeof(type)) != 0) return -1;
+            if (append_form_field(view_buf, sizeof(view_buf), &view_len, key, field, type) != 0) return -1;
+        }
+        view_len += (size_t)snprintf(view_buf + view_len, sizeof(view_buf) - view_len,
+                                     "  <input type=\"hidden\" name=\"_method\" value=\"PUT\" />\n"
+                                     "  <button type=\"submit\">Update</button>\n"
+                                     "</form>\n");
+        if (view_len >= sizeof(view_buf)) return -1;
         if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold edit"); return -1; }
     }
 

@@ -104,20 +104,24 @@
      ASSERT_TRUE(file_exists(path));
  }
 
-/* Scaffold generator: Post title:string body:text */
+/* Scaffold generator: Post title:string email:string body:text published:boolean */
 void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) {
-    const char *attrs[] = {"title:string", "body:text"};
-    const int attr_count = 2;
+    const char *attrs[] = {"title:string", "email:string", "body:text", "published:boolean"};
+    const int attr_count = 4;
 
     const char *model_path = "app/models/post.c";
     const char *controller_path = "app/controllers/posts_controller.c";
     const char *routes_path = "config/routes.c";
     const char *view_index_path = "app/views/posts/index.html";
+    const char *view_new_path = "app/views/posts/new.html";
+    const char *view_edit_path = "app/views/posts/edit.html";
 
     remove_if_exists(model_path);
     remove_if_exists(controller_path);
     remove_if_exists(routes_path);
     remove_if_exists(view_index_path);
+    remove_if_exists(view_new_path);
+    remove_if_exists(view_edit_path);
 
     ASSERT_EQ(forge_generate_scaffold("Post", attr_count, attrs), 0);
 
@@ -125,6 +129,8 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_exists(controller_path));
     ASSERT_TRUE(file_exists(routes_path));
     ASSERT_TRUE(file_exists(view_index_path));
+    ASSERT_TRUE(file_exists(view_new_path));
+    ASSERT_TRUE(file_exists(view_edit_path));
 
     /* Fields should be parsed into active_model_set_field calls. */
     ASSERT_TRUE(file_contains(model_path, "post_set_title"));
@@ -132,19 +138,40 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_contains(model_path, "post_set_body"));
     ASSERT_TRUE(file_contains(model_path, "active_model_set_field(m, \"body\", body)"));
 
-    /* Controller stub should exist. */
-    ASSERT_TRUE(file_contains(controller_path, "posts_controller_handle"));
-    ASSERT_TRUE(file_contains(controller_path, "posts_controller_register"));
-    ASSERT_TRUE(file_contains(controller_path, "action_router_add_route"));
-    ASSERT_TRUE(file_contains(controller_path, "\"/posts\""));
+    /* Controller REST-style stubs should exist. */
+    ASSERT_TRUE(file_contains(controller_path, "void posts_index("));
+    ASSERT_TRUE(file_contains(controller_path, "void posts_new("));
+    ASSERT_TRUE(file_contains(controller_path, "void posts_edit("));
+    ASSERT_TRUE(file_contains(controller_path, "void posts_create("));
+    ASSERT_TRUE(file_contains(controller_path, "void posts_update("));
 
-    /* Routes should auto-register via controller register helper. */
+    /* Routes should include resource endpoints. */
     ASSERT_TRUE(file_contains(routes_path, "app_register_routes"));
-    ASSERT_TRUE(file_contains(routes_path, "posts_controller_register"));
+    ASSERT_TRUE(file_contains(routes_path, "route_get(router, \"/posts\", posts_index)"));
+    ASSERT_TRUE(file_contains(routes_path, "route_post(router, \"/posts\", posts_create)"));
+    ASSERT_TRUE(file_contains(routes_path, "route_put(router, \"/posts/:id\", posts_update)"));
+
+    /* new/edit views should include scaffold form fields from attributes. */
+    ASSERT_TRUE(file_contains(view_new_path, "<form method=\"POST\" action=\"/posts\">"));
+    ASSERT_TRUE(file_contains(view_new_path, "<label for=\"title\">title</label>"));
+    ASSERT_TRUE(file_contains(view_new_path, "<input type=\"text\" id=\"title\" name=\"title\" />"));
+    ASSERT_TRUE(file_contains(view_new_path, "<input type=\"email\" id=\"email\" name=\"email\" />"));
+    ASSERT_TRUE(file_contains(view_new_path, "<label for=\"body\">body</label>"));
+    ASSERT_TRUE(file_contains(view_new_path, "<textarea id=\"body\" name=\"body\"></textarea>"));
+    ASSERT_TRUE(file_contains(view_new_path, "<label for=\"published\">published</label>"));
+    ASSERT_TRUE(file_contains(view_new_path, "<input type=\"checkbox\" id=\"published\" name=\"published\" />"));
+    ASSERT_TRUE(file_contains(view_edit_path, "<form method=\"POST\" action=\"/posts/1\">"));
+    ASSERT_TRUE(file_contains(view_edit_path, "<input type=\"hidden\" name=\"_method\" value=\"PUT\" />"));
+    ASSERT_TRUE(file_contains(view_edit_path, "<input type=\"text\" id=\"title\" name=\"title\" />"));
+    ASSERT_TRUE(file_contains(view_edit_path, "<input type=\"email\" id=\"email\" name=\"email\" />"));
+    ASSERT_TRUE(file_contains(view_edit_path, "<textarea id=\"body\" name=\"body\"></textarea>"));
+    ASSERT_TRUE(file_contains(view_edit_path, "<input type=\"checkbox\" id=\"published\" name=\"published\" />"));
 
     remove_if_exists(model_path);
     remove_if_exists(controller_path);
     remove_if_exists(routes_path);
     remove_if_exists(view_index_path);
+    remove_if_exists(view_new_path);
+    remove_if_exists(view_edit_path);
 }
  
