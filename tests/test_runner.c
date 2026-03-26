@@ -98,6 +98,7 @@ void test_cli_parse_new_command(void);
 void test_cli_parse_generate_controller_command(void);
 void test_cli_parse_db_migrate_command(void);
 void test_cli_parse_db_create_command(void);
+void test_cli_parse_generate_stimulus_command(void);
 void test_cli_parse_invalid_command_fails(void);
 void test_cli_dispatch_generate_controller_executes_handler(void);
 void test_cli_dispatch_db_migrate_executes_handler(void);
@@ -311,6 +312,7 @@ static void run_all_tests(void) {
     test_cli_parse_generate_controller_command();
     test_cli_parse_db_migrate_command();
     test_cli_parse_db_create_command();
+    test_cli_parse_generate_stimulus_command();
     test_cli_parse_invalid_command_fails();
     test_cli_dispatch_generate_controller_executes_handler();
     test_cli_dispatch_db_migrate_executes_handler();

@@ -134,6 +134,86 @@ Cortex includes:
    Then restart the server (`make server`) so the new controllers and routes
    are compiled and linked.
 
+## JavaScript layer (Rails-like + Stimulus-style)
+
+Cortex now includes a native JavaScript layer designed for server-rendered apps,
+following a Rails-like "convention over configuration" workflow.
+
+### What is included
+
+- A lightweight Stimulus-style runtime (`Controller` + `Application`)
+- Automatic controller discovery/registration by naming convention
+- `esbuild` as the default bundler
+- Asset fingerprinting + manifest support for production
+- Automatic script injection in rendered HTML (no manual `<script>` tag needed)
+
+### Directory conventions
+
+Generated projects and scaffold workflows use:
+
+```text
+app/javascript/
+  application.js
+  controllers/
+    index.js
+    *_controller.js
+js/runtime/
+  index.js
+public/assets/
+  manifest.json
+  application-<hash>.js
+```
+
+Controller naming rule:
+
+- file: `app/javascript/controllers/post_controller.js`
+- identifier: `post`
+- HTML usage: `data-controller="post"`
+
+### CLI commands
+
+Generate a Stimulus-style controller:
+
+```bash
+./cortex generate stimulus post
+```
+
+Build JavaScript assets for production:
+
+```bash
+./cortex assets:build
+```
+
+Run development mode (JS watch + server):
+
+```bash
+./cortex dev
+```
+
+### Scaffold integration
+
+`generate scaffold` now integrates JavaScript behavior automatically.
+
+Example:
+
+```bash
+./cortex generate scaffold Post title:string body:text
+```
+
+In addition to model/controller/views/routes, Cortex also generates:
+
+- `app/javascript/controllers/post_controller.js`
+- Stimulus-style attributes in scaffolded HTML:
+  - `data-controller`
+  - `data-action` (for example `submit->post#submit`)
+  - `data-post-target` (target bindings)
+
+### Layout/render integration
+
+When HTML is rendered through `Action View`, Cortex injects the JavaScript bundle
+automatically. In production mode, it resolves the hashed bundle name via
+`public/assets/manifest.json`.
+
 ## Contributing
 
 Contributions are welcome.
