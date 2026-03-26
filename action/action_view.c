@@ -4,6 +4,7 @@
 
 #include "action_view.h"
 #include "action_response.h"
+#include "action_assets.h"
 
 /* Defined by the build system (see Makefile). Provide a safe fallback. */
 #ifndef CORTEX_VERSION
@@ -181,12 +182,14 @@ void render_view(ActionResponse *res, const char *template_name) {
     /* The welcome page needs dynamic values (C standard & framework version). */
     if (strcmp(template_name, "home/index") == 0) {
         char *html = render_home_index_html();
+        char *html_with_assets;
         if (!html) {
             action_response_set(res, 500, "Template render error");
             action_response_set_content_type(res, "text/plain");
             return;
         }
-        action_response_set(res, 200, html);
+        html_with_assets = action_assets_inject_javascript(html);
+        action_response_set(res, 200, html_with_assets ? html_with_assets : html);
         action_response_set_content_type(res, "text/html");
         return;
     }
@@ -243,8 +246,11 @@ void render_view(ActionResponse *res, const char *template_name) {
     buf[len] = '\0';
     fclose(f);
 
-    /* For all other templates, just serve the file contents. */
-    action_response_set(res, 200, buf);
+    /* For all other templates, serve with JavaScript bootstrap injected. */
+    {
+        char *html_with_assets = action_assets_inject_javascript(buf);
+        action_response_set(res, 200, html_with_assets ? html_with_assets : buf);
+    }
     action_response_set_content_type(res, "text/html");
 }
 

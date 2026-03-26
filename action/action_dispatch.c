@@ -9,6 +9,7 @@
 #include "action_response.h"
 #include "action_router.h"
 #include "action_middleware.h"
+#include "action_assets.h"
 
 int action_dispatch(ActionRouter *router, ActionRequest *req, ActionResponse *res) {
     ActionHandler handler;
@@ -89,6 +90,11 @@ int action_dispatch_serve_http(ActionRouter *router) {
         req.method = method;
         req.path = path;
         req.body = NULL;
+
+        if (action_assets_serve_static_path(req.path, client_fd) == 0) {
+            close(client_fd);
+            continue;
+        }
 
         res.status = 200;
         res.body = "OK";

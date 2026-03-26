@@ -115,6 +115,7 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     const char *view_index_path = "app/views/posts/index.html";
     const char *view_new_path = "app/views/posts/new.html";
     const char *view_edit_path = "app/views/posts/edit.html";
+    const char *stimulus_controller_path = "app/javascript/controllers/post_controller.js";
 
     remove_if_exists(model_path);
     remove_if_exists(controller_path);
@@ -122,6 +123,7 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     remove_if_exists(view_index_path);
     remove_if_exists(view_new_path);
     remove_if_exists(view_edit_path);
+    remove_if_exists(stimulus_controller_path);
 
     ASSERT_EQ(forge_generate_scaffold("Post", attr_count, attrs), 0);
 
@@ -131,6 +133,7 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_exists(view_index_path));
     ASSERT_TRUE(file_exists(view_new_path));
     ASSERT_TRUE(file_exists(view_edit_path));
+    ASSERT_TRUE(file_exists(stimulus_controller_path));
 
     /* Fields should be parsed into active_model_set_field calls. */
     ASSERT_TRUE(file_contains(model_path, "post_set_title"));
@@ -152,7 +155,9 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_contains(routes_path, "route_put(router, \"/posts/:id\", posts_update)"));
 
     /* new/edit views should include scaffold form fields from attributes. */
-    ASSERT_TRUE(file_contains(view_new_path, "<form method=\"POST\" action=\"/posts\">"));
+    ASSERT_TRUE(file_contains(view_new_path, "<form method=\"POST\" action=\"/posts\""));
+    ASSERT_TRUE(file_contains(view_new_path, "data-controller=\"post\""));
+    ASSERT_TRUE(file_contains(view_new_path, "data-action=\"submit->post#submit\""));
     ASSERT_TRUE(file_contains(view_new_path, "<label for=\"title\">title</label>"));
     ASSERT_TRUE(file_contains(view_new_path, "<input type=\"text\" id=\"title\" name=\"title\" />"));
     ASSERT_TRUE(file_contains(view_new_path, "<input type=\"email\" id=\"email\" name=\"email\" />"));
@@ -160,7 +165,8 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_contains(view_new_path, "<textarea id=\"body\" name=\"body\"></textarea>"));
     ASSERT_TRUE(file_contains(view_new_path, "<label for=\"published\">published</label>"));
     ASSERT_TRUE(file_contains(view_new_path, "<input type=\"checkbox\" id=\"published\" name=\"published\" />"));
-    ASSERT_TRUE(file_contains(view_edit_path, "<form method=\"POST\" action=\"/posts/1\">"));
+    ASSERT_TRUE(file_contains(view_edit_path, "<form method=\"POST\" action=\"/posts/1\""));
+    ASSERT_TRUE(file_contains(view_edit_path, "data-controller=\"post\""));
     ASSERT_TRUE(file_contains(view_edit_path, "<input type=\"hidden\" name=\"_method\" value=\"PUT\" />"));
     ASSERT_TRUE(file_contains(view_edit_path, "<input type=\"text\" id=\"title\" name=\"title\" />"));
     ASSERT_TRUE(file_contains(view_edit_path, "<input type=\"email\" id=\"email\" name=\"email\" />"));
@@ -173,5 +179,6 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     remove_if_exists(view_index_path);
     remove_if_exists(view_new_path);
     remove_if_exists(view_edit_path);
+    remove_if_exists(stimulus_controller_path);
 }
  

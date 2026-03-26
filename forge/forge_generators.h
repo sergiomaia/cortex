@@ -15,6 +15,7 @@
  int forge_generate_controller(const char *name);
  int forge_generate_model(const char *name);
  int forge_generate_neural_model(const char *name);
+int forge_generate_stimulus_controller(const char *name);
  
 /* Generate a Rails-like scaffold for a resource.
  *

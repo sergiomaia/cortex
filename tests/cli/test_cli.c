@@ -34,6 +34,23 @@ static char **make_argv(const char *a0, const char *a1, const char *a2, const ch
     return argv;
 }
 
+static char **make_argv6(const char *a0, const char *a1, const char *a2, const char *a3, const char *a4, const char *a5, int *out_argc) {
+    int argc = 0;
+    char **argv = (char **)calloc(7, sizeof(char *));
+    if (!argv) {
+        *out_argc = 0;
+        return NULL;
+    }
+    if (a0) argv[argc++] = dup_cstr(a0);
+    if (a1) argv[argc++] = dup_cstr(a1);
+    if (a2) argv[argc++] = dup_cstr(a2);
+    if (a3) argv[argc++] = dup_cstr(a3);
+    if (a4) argv[argc++] = dup_cstr(a4);
+    if (a5) argv[argc++] = dup_cstr(a5);
+    *out_argc = argc;
+    return argv;
+}
+
 static void free_argv(char **argv, int argc) {
     int i;
     if (!argv) {
@@ -105,6 +122,18 @@ void test_cli_parse_db_create_command(void) {
     free_argv(argv, argc);
 }
 
+void test_cli_parse_generate_stimulus_command(void) {
+    int argc;
+    char **argv = make_argv6("cortex", "generate", "stimulus", "post", NULL, NULL, &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_STIMULUS);
+    ASSERT_STR_EQ(parsed.name, "post");
+
+    free_argv(argv, argc);
+}
+
 void test_cli_parse_new_command(void) {
     int argc;
     char **argv = make_argv("cortex", "new", "myapp", NULL, &argc);
@@ -158,7 +187,32 @@ static void remove_project_dir(const char *project_name) {
     remove_if_exists(path);
     if (snprintf(path, sizeof(path), "%s/Makefile", project_name) < 0) return;
     remove_if_exists(path);
+    if (snprintf(path, sizeof(path), "%s/.cortex_project", project_name) < 0) return;
+    remove_if_exists(path);
+    if (snprintf(path, sizeof(path), "%s/app/javascript/application.js", project_name) < 0) return;
+    remove_if_exists(path);
+    if (snprintf(path, sizeof(path), "%s/app/javascript/controllers/index.js", project_name) < 0) return;
+    remove_if_exists(path);
     if (snprintf(path, sizeof(path), "%s/app", project_name) < 0) return;
+    if (snprintf(path, sizeof(path), "%s/app/javascript/controllers", project_name) < 0) return;
+    rmdir(path);
+    if (snprintf(path, sizeof(path), "%s/app/javascript", project_name) < 0) return;
+    rmdir(path);
+    if (snprintf(path, sizeof(path), "%s/app/views/home", project_name) < 0) return;
+    rmdir(path);
+    if (snprintf(path, sizeof(path), "%s/app/views", project_name) < 0) return;
+    rmdir(path);
+    if (snprintf(path, sizeof(path), "%s/app/controllers", project_name) < 0) return;
+    rmdir(path);
+    if (snprintf(path, sizeof(path), "%s/app/models", project_name) < 0) return;
+    rmdir(path);
+    if (snprintf(path, sizeof(path), "%s/app/neural", project_name) < 0) return;
+    rmdir(path);
+    if (snprintf(path, sizeof(path), "%s/app", project_name) < 0) return;
+    rmdir(path);
+    if (snprintf(path, sizeof(path), "%s/public/assets", project_name) < 0) return;
+    rmdir(path);
+    if (snprintf(path, sizeof(path), "%s/public", project_name) < 0) return;
     rmdir(path);
     if (snprintf(path, sizeof(path), "%s/config", project_name) < 0) return;
     rmdir(path);
