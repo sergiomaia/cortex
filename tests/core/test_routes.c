@@ -41,16 +41,17 @@ void test_root_route_returns_welcome_page(void) {
     ASSERT_TRUE(strstr(res.body, needle_version) != NULL);
 }
 
+/* File scope avoids GCC nested-function trampolines (fragile with some link layouts). */
+static void sample_posts_index(ActionRequest *req, ActionResponse *res) {
+    (void)req;
+    action_controller_render_json(res, 200, "[]");
+}
+
 static void register_sample_post_routes(ActionRouter *router, ActiveRecordStore *store) {
     (void)store;
     /* Minimal stub to ensure routing for /posts uses the router correctly.
      * Full scaffold behaviour is tested in forge tests. */
-    void posts_index(ActionRequest *req, ActionResponse *res) {
-        (void)req;
-        action_controller_render_json(res, 200, "[]");
-    }
-
-    action_router_add_route(router, "GET", "/posts", posts_index);
+    action_router_add_route(router, "GET", "/posts", sample_posts_index);
 }
 
 void test_posts_index_route_via_router(void) {

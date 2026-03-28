@@ -1,6 +1,8 @@
- #include "forge_generators.h"
- 
- #include <ctype.h>
+#include "forge_generators.h"
+
+#include "../db/db_create.h"
+
+#include <ctype.h>
  #include <stdio.h>
  #include <stdlib.h>
  #include <string.h>
@@ -531,16 +533,25 @@ int forge_new_project(const char *project_name) {
         "#include <stdio.h>\n"
         "#include \"action/action_dispatch.h\"\n"
         "#include \"action/action_router.h\"\n"
-        "#include \"config/routes.h\"\n\n"
+        "#include \"config/routes.h\"\n"
+        "#include \"db/db_bootstrap.h\"\n\n"
         "void app_register_routes(ActionRouter *router);\n\n"
         "int main(int argc, char **argv) {\n"
         "    (void)argc;\n"
         "    (void)argv;\n"
+        "    if (cortex_db_bootstrap() != 0) {\n"
+        "        fprintf(stderr, \"database bootstrap failed\\n\");\n"
+        "        return 1;\n"
+        "    }\n"
         "    ActionRouter router;\n"
         "    action_router_init(&router);\n"
         "    app_register_routes(&router);\n"
         "    printf(\"Listening on http://localhost:3000\\n\");\n"
-        "    return action_dispatch_serve_http(&router);\n"
+        "    {\n"
+        "        int rc = action_dispatch_serve_http(&router);\n"
+        "        cortex_db_shutdown();\n"
+        "        return rc;\n"
+        "    }\n"
         "}\n";
     const char *makefile_content =
         "CC := gcc\n"
@@ -864,6 +875,9 @@ int forge_new_project(const char *project_name) {
         return -1;
     }
     if (write_template_file(path, runtime_js_content) != 0) {
+        return -1;
+    }
+    if (db_create_default_in_project(project_name) != 0) {
         return -1;
     }
     return 0;

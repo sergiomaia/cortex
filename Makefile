@@ -1,6 +1,12 @@
 CC := gcc
 VERSION := $(strip $(file <VERSION))
-CFLAGS := -Wall -Wextra -std=c11 -I. -Icore -Iaction -Iflow -Icache -Iguard -Iforge -Iconfig -DCORTEX_VERSION=\"$(VERSION)\" -DCORTEX_SOURCE_ROOT=\"$(CURDIR)\"
+
+# SQLite: always compile the official amalgamation into libcortex.a so apps only need
+# `-lcortex -lm` (see scripts/fetch-sqlite-amalgamation.sh; runs automatically on first build).
+SQLITE_CFLAGS := -I$(CURDIR)/vendor/sqlite
+SQLITE_SRCS := vendor/sqlite/sqlite3.c
+
+CFLAGS := -Wall -Wextra -std=c11 $(SQLITE_CFLAGS) -I. -Icore -Iaction -Iflow -Icache -Iguard -Iforge -Iconfig -Idb -DCORTEX_VERSION=\"$(VERSION)\" -DCORTEX_SOURCE_ROOT=\"$(CURDIR)\"
 
 CORE_SRCS := $(wildcard core/*.c)
 ACTION_SRCS := $(wildcard action/*.c)
@@ -8,7 +14,7 @@ FLOW_SRCS := $(wildcard flow/*.c)
 CACHE_SRCS := $(wildcard cache/*.c)
 GUARD_SRCS := $(wildcard guard/*.c)
 FORGE_SRCS := $(wildcard forge/*.c)
-DB_SRCS := $(wildcard db/*.c)
+DB_SRCS := $(wildcard db/*.c) $(wildcard db/sqlite/*.c)
 APP_SRCS := $(wildcard app/*/*.c) $(wildcard app/*/*/*.c)
 CONFIG_SRCS := $(wildcard config/*.c)
 
@@ -17,8 +23,13 @@ CONFIG_SRCS := $(wildcard config/*.c)
 CLI_MAIN_SRC := cli/cortex_main.c
 CLI_SRCS := $(filter-out $(CLI_MAIN_SRC), $(wildcard cli/*.c))
 
-SRCS := $(CORE_SRCS) $(ACTION_SRCS) $(FLOW_SRCS) $(CACHE_SRCS) $(GUARD_SRCS) $(FORGE_SRCS) $(DB_SRCS) $(CLI_SRCS) $(APP_SRCS) $(CONFIG_SRCS)
+SRCS := $(CORE_SRCS) $(ACTION_SRCS) $(FLOW_SRCS) $(CACHE_SRCS) $(GUARD_SRCS) $(FORGE_SRCS) $(DB_SRCS) $(CLI_SRCS) $(APP_SRCS) $(CONFIG_SRCS) $(SQLITE_SRCS)
 OBJS := $(SRCS:.c=.o)
+
+vendor/sqlite/sqlite3.c: scripts/fetch-sqlite-amalgamation.sh
+	./scripts/fetch-sqlite-amalgamation.sh
+
+$(OBJS): | vendor/sqlite/sqlite3.c
 
 TEST_SRCS := tests/test_runner.c \
              tests/flow/test_flow.c \
@@ -67,9 +78,12 @@ EXE := cortex
 LIB := libcortex.a
 MAIN_OBJ := $(CLI_MAIN_SRC:.c=.o)
 
-.PHONY: all clean test
+.PHONY: all clean test vendor-sqlite
 
 all: $(LIB) $(EXE)
+
+vendor-sqlite:
+	./scripts/fetch-sqlite-amalgamation.sh
 
 $(LIB): $(OBJS)
 	@rm -f $(LIB)
@@ -89,4 +103,3 @@ test: $(TEST_BIN)
 
 clean:
 	rm -f $(OBJS) $(LIB) $(TEST_BIN) $(EXE) $(MAIN_OBJ)
-
