@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Usuários</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #0d1117;
+      color: #c9d1d9;
+      font-family: "Courier New", monospace;
+    }
+    h1 {
+      font-size: 28px;
+      color: #58a6ff;
+      margin-bottom: 20px;
+    }
+    table {
+      width: 100%;
+      max-width: 960px;
+      border-collapse: collapse;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid #30363d;
+    }
+    th {
+      background: #21262d;
+      color: #8b949e;
+      font-weight: 600;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    tr:hover td {
+      background: #1c2128;
+    }
+    .nav {
+      margin-bottom: 16px;
+    }
+    .nav a {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+    .nav a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="nav"><a href="/">← Início</a></div>
+  <h1>Usuários</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>name</th>
+        <th>email</th>
+        <th>info</th>
+        <th>true</th>
+      </tr>
+    </thead>
+    <tbody>
+{{USER_ROWS}}
+    </tbody>
+  </table>
+</body>
+</html>
