@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE
 #include "../test_assert.h"
 
 #include <arpa/inet.h>
@@ -14,7 +15,7 @@
 
 #include "../../cli/cli.h"
 
-static int http_get_health(char *out, size_t out_size, int timeout_ms) {
+static int http_get_health(char *out, size_t out_size, int port, int timeout_ms) {
     int sockfd;
     struct sockaddr_in addr;
     int attempt_ms;
@@ -25,6 +26,7 @@ static int http_get_health(char *out, size_t out_size, int timeout_ms) {
     size_t total = 0;
 
     if (!out || out_size == 0) return -1;
+    if (port <= 0 || port > 65535) return -1;
     out[0] = '\0';
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -32,7 +34,7 @@ static int http_get_health(char *out, size_t out_size, int timeout_ms) {
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(3000);
+    addr.sin_port = htons((unsigned short)port);
     addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     attempt_ms = 0;
@@ -74,6 +76,10 @@ void test_cli_server_starts_http_and_handles_health_route(void) {
     pid_t pid;
     char response[2048];
     int status;
+    const int test_port = 31337;
+
+    /* Avoid collisions with other services commonly bound to 3000. */
+    setenv("CORE_PORT", "31337", 1);
 
     pid = fork();
     ASSERT_TRUE(pid >= 0);
@@ -90,7 +96,7 @@ void test_cli_server_starts_http_and_handles_health_route(void) {
 
     /* Parent: wait for server then hit /health. */
     memset(response, 0, sizeof(response));
-    ASSERT_EQ(http_get_health(response, sizeof(response), 3000), 0);
+    ASSERT_EQ(http_get_health(response, sizeof(response), test_port, 3000), 0);
 
     ASSERT_TRUE(strstr(response, "HTTP/1.1 200 OK") != NULL);
     ASSERT_TRUE(strstr(response, "\r\n\r\nOK") != NULL);
@@ -98,5 +104,7 @@ void test_cli_server_starts_http_and_handles_health_route(void) {
     /* Shutdown server child. */
     kill(pid, SIGKILL);
     waitpid(pid, &status, 0);
+
+    unsetenv("CORE_PORT");
 }
 

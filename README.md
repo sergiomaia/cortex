@@ -91,6 +91,62 @@ Cortex includes:
 - **Cache**: in-memory and external cache abstractions
 - **CLI**: the `cortex` command entrypoint
 - **App**: example application code (controllers, models, neural)
+- **DB**: SQLite-backed persistence (via `db_connection` + `db/sqlite/sqlite_adapter`)
+
+## Database (SQLite)
+
+Cortex uses **SQLite as the default database**, in the spirit of Rails: **zero YAML**, **convention over configuration**, and a project that runs after `cortex new` without manual DB setup.
+
+### Convention (paths and environment)
+
+| `CORE_ENV`    | Database file              |
+|---------------|----------------------------|
+| `development` | `db/development.sqlite3`   |
+| `test`        | `db/test.sqlite3`         |
+| `production`  | `db/production.sqlite3`    |
+
+- `CORE_ENV` defaults to **`development`** when unset (same as `core_config_load()`).
+- The path helper is `db_path_for_environment()` in `db/db_paths.c` / `db/db_paths.h`.
+
+### Architecture
+
+- **`db/db_connection.h`** — Small, engine-agnostic API: connect, `exec`, prepared statements (`prepare` / `step` / `bind_int` / `column_int` / `finalize`), close. Call sites should depend on this header, not on SQLite directly.
+- **`db/sqlite/sqlite_adapter.c`** — Implements that API with the SQLite C API (`sqlite3.h`).
+- **`db/db_bootstrap.h`** — Application lifecycle:
+  - **`cortex_db_bootstrap()`** — Runs pending migrations (`db_migrate_default()`), then opens a **single** process-wide connection via **`cortex_db_init()`** (reuse across requests in the same process).
+  - **`cortex_db_shutdown()`** — Closes the connection on exit.
+  - **`cortex_db_exec(const char *sql)`** — Convenience wrapper around the active connection (for migrations or app code that runs SQL strings).
+
+### Migrations
+
+- **Default (SQLite):** executed versions are stored in the **`schema_migrations`** table (`version INTEGER PRIMARY KEY`).
+- **Legacy:** if the migration “storage” path ends with **`.json`**, the older JSON array format is still supported (mainly for tests); new apps should use SQLite paths only.
+- **`db_migrate()`** / **`db_migrate_default()`** — Register C `up` callbacks (`DbMigration` + `active_migration_*`). Passing **`NULL`** as the path selects the default SQLite file for the current environment.
+- **`db/db_migration_generator.c`** — Can generate stub migration files under `db/migrations/` (convention for future SQL-based workflows).
+
+### CLI
+
+| Command            | Behavior |
+|--------------------|----------|
+| `cortex db:create` | Creates **`db/`** and the default SQLite file for the current **`CORE_ENV`** (no path argument). |
+| `cortex db:migrate` | Runs pending migrations against that same default database. |
+
+Alternate forms: `cortex db create`, `cortex db migrate`.
+
+### New projects (`cortex new`)
+
+- Creates **`db/`** and **`db/development.sqlite3`** immediately (empty database file).
+- Generated **`main.c`** includes **`db/db_bootstrap.h`** and calls **`cortex_db_bootstrap()`** before serving, and **`cortex_db_shutdown()`** when the server loop ends. First boot creates the file (if missing), applies migrations, and keeps one connection open.
+
+### Building the framework and SQLite
+
+- `libcortex.a` embeds the official **[SQLite amalgamation](https://www.sqlite.org/amalgamation.html)** (`sqlite3.c`) so **generated apps only link** `-lcortex -lm` (no separate `-lsqlite3` on the app).
+- On the **first** `make` in the Cortex repo, `vendor/sqlite/sqlite3.c` (and headers) are fetched by **`scripts/fetch-sqlite-amalgamation.sh`** (requires network once). The script is idempotent; large files are listed in `.gitignore` so clones stay small.
+- Offline: run the script after copying the amalgamation into `vendor/sqlite/`, or unpack the official zip there.
+
+### HTTP port (for local servers and tests)
+
+- The embedded HTTP server listens on **`CORE_PORT`**, default **3000** (`core_config_load()`). Tests may set `CORE_PORT` to avoid clashes with other services on port 3000.
 
 ## Getting Started
 
@@ -118,17 +174,17 @@ Cortex includes:
 
 4. Open `http://localhost:3000`. You should see the Cortex welcome page.
 
-5. Create storage and apply migrations (inside `blog/`):
+5. Database (optional if you already started the server): **`cortex_db_bootstrap()`** in the generated app already creates the file and runs migrations on boot. To run the same steps manually from the project directory (adjust the path to the `cortex` binary if needed):
 
    ```bash
-   ../../cortex db:create
-   ../../cortex db:migrate
+   ../cortex db:create
+   ../cortex db:migrate
    ```
 
 6. Generate scaffold endpoints:
 
    ```bash
-   ../../cortex generate scaffold Post title:string body:text
+   ../cortex generate scaffold Post title:string body:text
    ```
 
    Then restart the server (`make server`) so the new controllers and routes

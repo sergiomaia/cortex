@@ -1,0 +1,4 @@
+# Fetched on first build by scripts/fetch-sqlite-amalgamation.sh
+/vendor/sqlite/sqlite3.c
+/vendor/sqlite/sqlite3.h
+/vendor/sqlite/sqlite3ext.h

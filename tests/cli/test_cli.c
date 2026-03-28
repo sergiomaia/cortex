@@ -216,6 +216,8 @@ static void remove_project_dir(const char *project_name) {
     rmdir(path);
     if (snprintf(path, sizeof(path), "%s/config", project_name) < 0) return;
     rmdir(path);
+    if (snprintf(path, sizeof(path), "%s/db/development.sqlite3", project_name) < 0) return;
+    remove_if_exists(path);
     if (snprintf(path, sizeof(path), "%s/db", project_name) < 0) return;
     rmdir(path);
     if (snprintf(path, sizeof(path), "%s", project_name) < 0) return;
@@ -246,7 +248,7 @@ void test_cli_dispatch_db_migrate_executes_handler(void) {
 }
 
 void test_cli_dispatch_db_create_executes_handler(void) {
-    const char *storage = "db/storage.json";
+    const char *storage = "db/development.sqlite3";
     const char *dbdir = "db";
     CliParsed parsed;
 
@@ -286,6 +288,8 @@ void test_forge_new_creates_project_directory(void) {
     ASSERT_TRUE(dir_exists(path));
     snprintf(path, sizeof(path), "%s/db", project_name);
     ASSERT_TRUE(dir_exists(path));
+    snprintf(path, sizeof(path), "%s/db/development.sqlite3", project_name);
+    ASSERT_TRUE(file_exists(path));
 
     remove_project_dir(project_name);
 }
@@ -328,6 +332,8 @@ void test_cli_dispatch_new_creates_project(void) {
     ASSERT_TRUE(dir_exists(path));
     snprintf(path, sizeof(path), "%s/db", project_name);
     ASSERT_TRUE(dir_exists(path));
+    snprintf(path, sizeof(path), "%s/db/development.sqlite3", project_name);
+    ASSERT_TRUE(file_exists(path));
 
     remove_project_dir(project_name);
 }

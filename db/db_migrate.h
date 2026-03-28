@@ -10,15 +10,16 @@ typedef struct {
     ActiveMigrationFn up;
 } DbMigration;
 
-/* Run pending migrations using persisted executed versions in `storage_path`.
+/* Run pending migrations using persisted executed versions.
  *
- * Storage format:
- *   - a JSON-like array of integers (e.g. `[]`, `[1,2]`)
- *   - the parser is best-effort: it just scans numbers
+ * If `storage_path` is NULL or empty, uses db/<CORE_ENV>.sqlite3 (default development).
+ *
+ * SQLite (default): versions are stored in table `schema_migrations`.
+ * Legacy JSON: if the path ends with `.json`, versions are read/written as a JSON array of ints.
  */
 int db_migrate(const char *storage_path, const DbMigration *migrations, int migration_count);
 
-/* Convenience default migrations for this scaffold. */
+/* Convenience default migrations for this scaffold. NULL path selects the default SQLite file. */
 int db_migrate_default(const char *storage_path);
 
 #endif /* DB_MIGRATE_H */

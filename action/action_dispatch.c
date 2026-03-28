@@ -10,6 +10,7 @@
 #include "action_router.h"
 #include "action_middleware.h"
 #include "action_assets.h"
+#include "../core/core_config.h"
 
 int action_dispatch(ActionRouter *router, ActionRequest *req, ActionResponse *res) {
     ActionHandler handler;
@@ -25,17 +26,23 @@ int action_dispatch(ActionRouter *router, ActionRequest *req, ActionResponse *re
     return 0;
 }
 
-/* Very small, synchronous HTTP server. Listens on port 3000 and handles
- * one request per accepted connection.
- */
+/* Very small, synchronous HTTP server. Listens on CORE_PORT (default 3000). */
 int action_dispatch_serve_http(ActionRouter *router) {
     int server_fd, client_fd;
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
     char buffer[1024];
+    CoreConfig cfg;
+    int port;
 
     if (!router) {
         return -1;
+    }
+
+    cfg = core_config_load();
+    port = cfg.port;
+    if (port <= 0 || port > 65535) {
+        port = 3000;
     }
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -47,7 +54,7 @@ int action_dispatch_serve_http(ActionRouter *router) {
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    addr.sin_port = htons(3000);
+    addr.sin_port = htons((unsigned short)port);
 
     if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         perror("action_dispatch_serve_http: bind failed");

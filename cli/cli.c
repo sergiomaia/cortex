@@ -389,13 +389,12 @@ static int cli_handle_dev(void) {
 
 static int cli_handle_db_migrate(void) {
     printf("db:migrate: running migrations\n");
-    return db_migrate_default("db/storage.json");
+    return db_migrate_default(NULL);
 }
 
 static int cli_handle_db_create(void) {
-    /* Default storage is `db/storage.json`. */
-    printf("db:create: creating database\n");
-    return db_create("db/storage.json");
+    printf("db:create: creating database (default SQLite for current environment)\n");
+    return db_create(NULL);
 }
 
 static int cli_handle_version(void) {
