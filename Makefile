@@ -8,6 +8,9 @@ SQLITE_SRCS := vendor/sqlite/sqlite3.c
 
 CFLAGS := -Wall -Wextra -std=c11 $(SQLITE_CFLAGS) -I. -Icore -Iaction -Iflow -Icache -Iguard -Iforge -Iconfig -Idb -DCORTEX_VERSION=\"$(VERSION)\" -DCORTEX_SOURCE_ROOT=\"$(CURDIR)\"
 
+# The first explicit rule in this file must not steal the default goal from 'all'.
+.DEFAULT_GOAL := all
+
 CORE_SRCS := $(wildcard core/*.c)
 ACTION_SRCS := $(wildcard action/*.c)
 FLOW_SRCS := $(wildcard flow/*.c)
@@ -26,7 +29,8 @@ CLI_SRCS := $(filter-out $(CLI_MAIN_SRC), $(wildcard cli/*.c))
 SRCS := $(CORE_SRCS) $(ACTION_SRCS) $(FLOW_SRCS) $(CACHE_SRCS) $(GUARD_SRCS) $(FORGE_SRCS) $(DB_SRCS) $(CLI_SRCS) $(APP_SRCS) $(CONFIG_SRCS) $(SQLITE_SRCS)
 OBJS := $(SRCS:.c=.o)
 
-vendor/sqlite/sqlite3.c: scripts/fetch-sqlite-amalgamation.sh
+# Only when sqlite3.c is missing; do not depend on the script mtime (avoids re-running every build).
+vendor/sqlite/sqlite3.c:
 	./scripts/fetch-sqlite-amalgamation.sh
 
 $(OBJS): | vendor/sqlite/sqlite3.c

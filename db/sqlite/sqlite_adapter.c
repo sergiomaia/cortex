@@ -150,3 +150,10 @@ int db_statement_column_int(DbStatement *stmt, int col_index) {
     }
     return sqlite3_column_int(stmt->stmt, col_index);
 }
+
+const char *db_statement_column_text(DbStatement *stmt, int col_index) {
+    if (!stmt || !stmt->stmt || col_index < 0) {
+        return NULL;
+    }
+    return (const char *)sqlite3_column_text(stmt->stmt, col_index);
+}
