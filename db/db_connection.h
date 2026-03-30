@@ -20,6 +20,7 @@ int db_statement_step(DbStatement *stmt);
 void db_statement_finalize(DbStatement *stmt);
 
 int db_statement_bind_int(DbStatement *stmt, int index, int value);
+int db_statement_bind_text(DbStatement *stmt, int index, const char *value);
 int db_statement_column_int(DbStatement *stmt, int col_index);
 
 /* Text column; pointer is valid until the next step/finalize on this statement. */

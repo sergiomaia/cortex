@@ -144,6 +144,21 @@ int db_statement_bind_int(DbStatement *stmt, int index, int value) {
     return 0;
 }
 
+int db_statement_bind_text(DbStatement *stmt, int index, const char *value) {
+    int rc;
+
+    if (!stmt || !stmt->stmt || index <= 0) {
+        return -1;
+    }
+
+    rc = sqlite3_bind_text(stmt->stmt, index, value ? value : "", -1, SQLITE_TRANSIENT);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "db: bind_text failed: %s\n", sqlite3_errmsg(sqlite3_db_handle(stmt->stmt)));
+        return -1;
+    }
+    return 0;
+}
+
 int db_statement_column_int(DbStatement *stmt, int col_index) {
     if (!stmt || !stmt->stmt || col_index < 0) {
         return 0;

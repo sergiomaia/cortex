@@ -19,7 +19,8 @@ GUARD_SRCS := $(wildcard guard/*.c)
 FORGE_SRCS := $(wildcard forge/*.c)
 DB_SRCS := $(wildcard db/*.c) $(wildcard db/sqlite/*.c)
 APP_SRCS := $(wildcard app/*/*.c) $(wildcard app/*/*/*.c)
-CONFIG_SRCS := $(wildcard config/*.c)
+# Always include config/routes.c (register_routes); wildcard alone omits it if the file is missing.
+CONFIG_SRCS := config/routes.c $(filter-out config/routes.c,$(wildcard config/*.c))
 
 # Provide an executable entrypoint, but keep the static library unchanged.
 # `cli/cortex_main.c` is linked into the `cortex` binary only (not archived into libcortex.a).
@@ -82,9 +83,14 @@ EXE := cortex
 LIB := libcortex.a
 MAIN_OBJ := $(CLI_MAIN_SRC:.c=.o)
 
-.PHONY: all clean test vendor-sqlite
+.PHONY: all clean rebuild test vendor-sqlite
 
 all: $(LIB) $(EXE)
+
+# Sequential full rebuild (use this instead of `make clean & make`, which races:
+# background clean deletes *.o while the other make is still building).
+rebuild: clean
+	$(MAKE) all
 
 vendor-sqlite:
 	./scripts/fetch-sqlite-amalgamation.sh

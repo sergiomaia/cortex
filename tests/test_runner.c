@@ -61,6 +61,8 @@ void test_root_route_returns_welcome_page(void);
 void test_posts_index_route_via_router(void);
 void test_action_request_parse_simple_get(void);
 void test_action_response_set_formats_fields(void);
+void test_action_request_form_get_decodes_urlencoded(void);
+void test_action_request_form_present_matches_names(void);
 void test_action_router_register_and_match_literal_route(void);
 void test_action_router_match_dynamic_incident_route(void);
 void test_action_controller_receives_request_params(void);
@@ -273,6 +275,8 @@ static void run_all_tests(void) {
     test_posts_index_route_via_router();
     test_action_request_parse_simple_get();
     test_action_response_set_formats_fields();
+    test_action_request_form_get_decodes_urlencoded();
+    test_action_request_form_present_matches_names();
     test_action_router_register_and_match_literal_route();
     test_action_router_match_dynamic_incident_route();
     test_action_controller_receives_request_params();

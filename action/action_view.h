@@ -14,5 +14,12 @@ void action_view_render(ActionView *view, const char *data, char *buffer, int bu
  */
 void render_view(ActionResponse *res, const char *template_name);
 
+/* Escape &, <, >, " for safe HTML text nodes. Returns malloc'd string or NULL. */
+char *action_view_escape_html(const char *input);
+
+/* Render dynamically built HTML with the same layout + JS injection as render_view.
+ * Takes ownership of inner_html (malloc'd); frees it on error paths. */
+void render_html(ActionResponse *res, char *inner_html);
+
 #endif /* ACTION_VIEW_H */
 

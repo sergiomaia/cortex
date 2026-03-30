@@ -9,8 +9,745 @@
  #include <sys/stat.h>
  #include <sys/types.h>
  #include <errno.h>
+ #include <time.h>
+ #include <stdarg.h>
  
 static int ensure_javascript_structure(void);
+
+typedef struct {
+    char *p;
+    size_t len;
+    size_t cap;
+} ForgeStrBuf;
+
+static int forge_str_reserve(ForgeStrBuf *b, size_t add) {
+    while (b->len + add + 1 > b->cap) {
+        size_t ncap = b->cap ? b->cap * 2 : 16384;
+        char *np = (char *)realloc(b->p, ncap);
+        if (!np) {
+            return -1;
+        }
+        b->p = np;
+        b->cap = ncap;
+    }
+    return 0;
+}
+
+static int forge_str_fmt(ForgeStrBuf *b, const char *fmt, ...) {
+    va_list ap;
+    int n;
+
+    va_start(ap, fmt);
+    n = vsnprintf(NULL, 0, fmt, ap);
+    va_end(ap);
+    if (n < 0) {
+        return -1;
+    }
+    if (forge_str_reserve(b, (size_t)n + 1) != 0) {
+        return -1;
+    }
+    va_start(ap, fmt);
+    vsnprintf(b->p + b->len, b->cap - b->len, fmt, ap);
+    va_end(ap);
+    b->len += (size_t)n;
+    return 0;
+}
+
+static void forge_str_free(ForgeStrBuf *b) {
+    free(b->p);
+    b->p = NULL;
+    b->len = 0;
+    b->cap = 0;
+}
+
+static void str_to_lower(const char *in, char *out, size_t out_size);
+static int parse_attribute_key(const char *attr, char *out, size_t out_size);
+static int parse_attribute_type(const char *attr, char *out, size_t out_size);
+
+/* INSERT/UPDATE from form POST + redirect (see action_request_form + HTTP body in action_dispatch). */
+static int forge_emit_scaffold_create_update(ForgeStrBuf *b,
+                                             const char *resource_plural,
+                                             int attr_count,
+                                             const char **attributes) {
+    int i;
+    int bind_idx;
+
+    if (attr_count == 0) {
+        if (forge_str_fmt(b,
+                          "void %s_create(ActionRequest *req, ActionResponse *res) {\n"
+                          "    DbConnection *conn;\n"
+                          "    DbStatement *st = NULL;\n"
+                          "    char loc[128];\n"
+                          "    const char *sql_ins = \"INSERT INTO %s DEFAULT VALUES\";\n"
+                          "    (void)req;\n"
+                          "    conn = cortex_db_connection();\n"
+                          "    if (!conn) {\n"
+                          "        action_controller_render_text(res, 500, \"Database unavailable\");\n"
+                          "        return;\n"
+                          "    }\n"
+                          "    if (db_connection_prepare(conn, sql_ins, &st) != 0) {\n"
+                          "        action_controller_render_text(res, 500, \"Database query failed\");\n"
+                          "        return;\n"
+                          "    }\n"
+                          "    if (db_statement_step(st) != 0) {\n"
+                          "        db_statement_finalize(st);\n"
+                          "        action_controller_render_text(res, 500, \"Database write failed\");\n"
+                          "        return;\n"
+                          "    }\n"
+                          "    db_statement_finalize(st);\n"
+                          "    (void)snprintf(loc, sizeof(loc), \"/%%s\", \"%s\");\n"
+                          "    action_controller_render_redirect(res, 303, loc);\n"
+                          "}\n\n"
+                          "void %s_update(ActionRequest *req, ActionResponse *res) {\n"
+                          "    int rid = 0;\n"
+                          "    char path_fmt[128];\n"
+                          "    DbConnection *conn;\n"
+                          "    DbStatement *st = NULL;\n"
+                          "    char loc[128];\n"
+                          "    const char *sql_up = \"UPDATE %s SET id=id WHERE id=?\";\n"
+                          "    (void)snprintf(path_fmt, sizeof(path_fmt), \"/%%s/%%%%d\", \"%s\");\n"
+                          "    if (sscanf(req->path, path_fmt, &rid) != 1) {\n"
+                          "        action_controller_render_text(res, 400, \"Bad request\");\n"
+                          "        return;\n"
+                          "    }\n"
+                          "    (void)req;\n"
+                          "    conn = cortex_db_connection();\n"
+                          "    if (!conn) {\n"
+                          "        action_controller_render_text(res, 500, \"Database unavailable\");\n"
+                          "        return;\n"
+                          "    }\n"
+                          "    if (db_connection_prepare(conn, sql_up, &st) != 0) {\n"
+                          "        action_controller_render_text(res, 500, \"Database query failed\");\n"
+                          "        return;\n"
+                          "    }\n"
+                          "    if (db_statement_bind_int(st, 1, rid) != 0) {\n"
+                          "        db_statement_finalize(st);\n"
+                          "        action_controller_render_text(res, 500, \"Bind failed\");\n"
+                          "        return;\n"
+                          "    }\n"
+                          "    if (db_statement_step(st) != 0) {\n"
+                          "        db_statement_finalize(st);\n"
+                          "        action_controller_render_text(res, 500, \"Database write failed\");\n"
+                          "        return;\n"
+                          "    }\n"
+                          "    db_statement_finalize(st);\n"
+                          "    (void)snprintf(loc, sizeof(loc), \"/%%s\", \"%s\");\n"
+                          "    action_controller_render_redirect(res, 303, loc);\n"
+                          "}\n\n",
+                          resource_plural,
+                          resource_plural,
+                          resource_plural,
+                          resource_plural,
+                          resource_plural,
+                          resource_plural,
+                          resource_plural) != 0) {
+            return -1;
+        }
+        return 0;
+    }
+
+    if (forge_str_fmt(b,
+                      "void %s_create(ActionRequest *req, ActionResponse *res) {\n"
+                      "    DbConnection *conn;\n"
+                      "    DbStatement *st = NULL;\n"
+                      "    char val_buf[8192];\n"
+                      "    char loc[128];\n"
+                      "    const char *sql_ins = \"INSERT INTO %s (",
+                      resource_plural,
+                      resource_plural) != 0) {
+        return -1;
+    }
+
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        if (!attributes || !attributes[i]) {
+            return -1;
+        }
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) {
+            return -1;
+        }
+        str_to_lower(key, field, sizeof(field));
+        if (forge_str_fmt(b, "%s%s", i > 0 ? ", " : "", field) != 0) {
+            return -1;
+        }
+    }
+
+    if (forge_str_fmt(b, ") VALUES (") != 0) {
+        return -1;
+    }
+    for (i = 0; i < attr_count; ++i) {
+        if (forge_str_fmt(b, "%s?", i > 0 ? ", " : "") != 0) {
+            return -1;
+        }
+    }
+
+    if (forge_str_fmt(b,
+                      ")\";\n"
+                      "    if (!req || !req->body) {\n"
+                      "        action_controller_render_text(res, 400, \"Bad request\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    conn = cortex_db_connection();\n"
+                      "    if (!conn) {\n"
+                      "        action_controller_render_text(res, 500, \"Database unavailable\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    if (db_connection_prepare(conn, sql_ins, &st) != 0) {\n"
+                      "        action_controller_render_text(res, 500, \"Database query failed\");\n"
+                      "        return;\n"
+                      "    }\n") != 0) {
+        return -1;
+    }
+
+    bind_idx = 1;
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        char typ[32];
+        int is_bool;
+        int is_int;
+        int is_real;
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) {
+            return -1;
+        }
+        str_to_lower(key, field, sizeof(field));
+        if (parse_attribute_type(attributes[i], typ, sizeof(typ)) != 0) {
+            return -1;
+        }
+        is_bool = (strcmp(typ, "boolean") == 0 || strcmp(typ, "bool") == 0);
+        is_int = (strcmp(typ, "integer") == 0 || strcmp(typ, "int") == 0);
+        is_real = (strcmp(typ, "float") == 0 || strcmp(typ, "decimal") == 0 || strcmp(typ, "real") == 0);
+
+        if (is_bool) {
+            if (forge_str_fmt(b,
+                              "    if (db_statement_bind_int(st, %d, action_request_form_present(req->body, \"%s\") ? 1 : 0) != 0) {\n"
+                              "        db_statement_finalize(st);\n"
+                              "        action_controller_render_text(res, 500, \"Bind failed\");\n"
+                              "        return;\n"
+                              "    }\n",
+                              bind_idx++,
+                              field) != 0) {
+                return -1;
+            }
+        } else if (is_int) {
+            if (forge_str_fmt(b,
+                              "    if (action_request_form_get(req->body, \"%s\", val_buf, sizeof(val_buf)) < 0) {\n"
+                              "        val_buf[0] = '\\0';\n"
+                              "    }\n"
+                              "    if (db_statement_bind_int(st, %d, atoi(val_buf)) != 0) {\n"
+                              "        db_statement_finalize(st);\n"
+                              "        action_controller_render_text(res, 500, \"Bind failed\");\n"
+                              "        return;\n"
+                              "    }\n",
+                              field,
+                              bind_idx++) != 0) {
+                return -1;
+            }
+        } else if (is_real) {
+            if (forge_str_fmt(b,
+                              "    if (action_request_form_get(req->body, \"%s\", val_buf, sizeof(val_buf)) < 0) {\n"
+                              "        val_buf[0] = '\\0';\n"
+                              "    }\n"
+                              "    if (db_statement_bind_text(st, %d, val_buf) != 0) {\n"
+                              "        db_statement_finalize(st);\n"
+                              "        action_controller_render_text(res, 500, \"Bind failed\");\n"
+                              "        return;\n"
+                              "    }\n",
+                              field,
+                              bind_idx++) != 0) {
+                return -1;
+            }
+        } else {
+            if (forge_str_fmt(b,
+                              "    if (action_request_form_get(req->body, \"%s\", val_buf, sizeof(val_buf)) < 0) {\n"
+                              "        val_buf[0] = '\\0';\n"
+                              "    }\n"
+                              "    if (db_statement_bind_text(st, %d, val_buf) != 0) {\n"
+                              "        db_statement_finalize(st);\n"
+                              "        action_controller_render_text(res, 500, \"Bind failed\");\n"
+                              "        return;\n"
+                              "    }\n",
+                              field,
+                              bind_idx++) != 0) {
+                return -1;
+            }
+        }
+    }
+
+    if (forge_str_fmt(b,
+                      "    if (db_statement_step(st) != 0) {\n"
+                      "        db_statement_finalize(st);\n"
+                      "        action_controller_render_text(res, 500, \"Database write failed\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    db_statement_finalize(st);\n"
+                      "    (void)snprintf(loc, sizeof(loc), \"/%%s\", \"%s\");\n"
+                      "    action_controller_render_redirect(res, 303, loc);\n"
+                      "}\n\n",
+                      resource_plural) != 0) {
+        return -1;
+    }
+
+    /* --- update --- */
+    if (forge_str_fmt(b,
+                      "void %s_update(ActionRequest *req, ActionResponse *res) {\n"
+                      "    int rid = 0;\n"
+                      "    char path_fmt[128];\n"
+                      "    DbConnection *conn;\n"
+                      "    DbStatement *st = NULL;\n"
+                      "    char val_buf[8192];\n"
+                      "    char loc[128];\n"
+                      "    const char *sql_up = \"UPDATE %s SET ",
+                      resource_plural,
+                      resource_plural) != 0) {
+        return -1;
+    }
+
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) {
+            return -1;
+        }
+        str_to_lower(key, field, sizeof(field));
+        if (forge_str_fmt(b, "%s%s=?", i > 0 ? ", " : "", field) != 0) {
+            return -1;
+        }
+    }
+
+    if (forge_str_fmt(b,
+                      " WHERE id=?\";\n"
+                      "    (void)snprintf(path_fmt, sizeof(path_fmt), \"/%%s/%%%%d\", \"%s\");\n"
+                      "    if (sscanf(req->path, path_fmt, &rid) != 1) {\n"
+                      "        action_controller_render_text(res, 400, \"Bad request\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    if (!req || !req->body) {\n"
+                      "        action_controller_render_text(res, 400, \"Bad request\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    conn = cortex_db_connection();\n"
+                      "    if (!conn) {\n"
+                      "        action_controller_render_text(res, 500, \"Database unavailable\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    if (db_connection_prepare(conn, sql_up, &st) != 0) {\n"
+                      "        action_controller_render_text(res, 500, \"Database query failed\");\n"
+                      "        return;\n"
+                      "    }\n",
+                      resource_plural) != 0) {
+        return -1;
+    }
+
+    bind_idx = 1;
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        char typ[32];
+        int is_bool;
+        int is_int;
+        int is_real;
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) {
+            return -1;
+        }
+        str_to_lower(key, field, sizeof(field));
+        if (parse_attribute_type(attributes[i], typ, sizeof(typ)) != 0) {
+            return -1;
+        }
+        is_bool = (strcmp(typ, "boolean") == 0 || strcmp(typ, "bool") == 0);
+        is_int = (strcmp(typ, "integer") == 0 || strcmp(typ, "int") == 0);
+        is_real = (strcmp(typ, "float") == 0 || strcmp(typ, "decimal") == 0 || strcmp(typ, "real") == 0);
+
+        if (is_bool) {
+            if (forge_str_fmt(b,
+                              "    if (db_statement_bind_int(st, %d, action_request_form_present(req->body, \"%s\") ? 1 : 0) != 0) {\n"
+                              "        db_statement_finalize(st);\n"
+                              "        action_controller_render_text(res, 500, \"Bind failed\");\n"
+                              "        return;\n"
+                              "    }\n",
+                              bind_idx++,
+                              field) != 0) {
+                return -1;
+            }
+        } else if (is_int) {
+            if (forge_str_fmt(b,
+                              "    if (action_request_form_get(req->body, \"%s\", val_buf, sizeof(val_buf)) < 0) {\n"
+                              "        val_buf[0] = '\\0';\n"
+                              "    }\n"
+                              "    if (db_statement_bind_int(st, %d, atoi(val_buf)) != 0) {\n"
+                              "        db_statement_finalize(st);\n"
+                              "        action_controller_render_text(res, 500, \"Bind failed\");\n"
+                              "        return;\n"
+                              "    }\n",
+                              field,
+                              bind_idx++) != 0) {
+                return -1;
+            }
+        } else if (is_real) {
+            if (forge_str_fmt(b,
+                              "    if (action_request_form_get(req->body, \"%s\", val_buf, sizeof(val_buf)) < 0) {\n"
+                              "        val_buf[0] = '\\0';\n"
+                              "    }\n"
+                              "    if (db_statement_bind_text(st, %d, val_buf) != 0) {\n"
+                              "        db_statement_finalize(st);\n"
+                              "        action_controller_render_text(res, 500, \"Bind failed\");\n"
+                              "        return;\n"
+                              "    }\n",
+                              field,
+                              bind_idx++) != 0) {
+                return -1;
+            }
+        } else {
+            if (forge_str_fmt(b,
+                              "    if (action_request_form_get(req->body, \"%s\", val_buf, sizeof(val_buf)) < 0) {\n"
+                              "        val_buf[0] = '\\0';\n"
+                              "    }\n"
+                              "    if (db_statement_bind_text(st, %d, val_buf) != 0) {\n"
+                              "        db_statement_finalize(st);\n"
+                              "        action_controller_render_text(res, 500, \"Bind failed\");\n"
+                              "        return;\n"
+                              "    }\n",
+                              field,
+                              bind_idx++) != 0) {
+                return -1;
+            }
+        }
+    }
+
+    if (forge_str_fmt(b,
+                      "    if (db_statement_bind_int(st, %d, rid) != 0) {\n"
+                      "        db_statement_finalize(st);\n"
+                      "        action_controller_render_text(res, 500, \"Bind failed\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    if (db_statement_step(st) != 0) {\n"
+                      "        db_statement_finalize(st);\n"
+                      "        action_controller_render_text(res, 500, \"Database write failed\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    db_statement_finalize(st);\n"
+                      "    (void)snprintf(loc, sizeof(loc), \"/%%s\", \"%s\");\n"
+                      "    action_controller_render_redirect(res, 303, loc);\n"
+                      "}\n\n",
+                      bind_idx,
+                      resource_plural) != 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+/* Emit C source for scaffold controller: index/show read rows from SQLite; new/edit still use templates. */
+static int forge_emit_scaffold_controller(ForgeStrBuf *b,
+                                          const char *resource,
+                                          const char *resource_plural,
+                                          const char *type_name,
+                                          int attr_count,
+                                          const char **attributes) {
+    int i;
+
+    (void)resource;
+    if (forge_str_fmt(b,
+                      "/* Auto-generated scaffold controller: %s (index/show use SQLite via cortex_db_connection) */\n"
+                      "#include \"action_controller.h\"\n"
+                      "#include \"action_view.h\"\n"
+                      "#include \"action_request_form.h\"\n"
+                      "#include \"db/db_bootstrap.h\"\n"
+                      "#include \"db/db_connection.h\"\n\n"
+                      "#include <stdio.h>\n"
+                      "#include <stdlib.h>\n"
+                      "#include <string.h>\n\n",
+                      resource_plural) != 0) {
+        return -1;
+    }
+
+    /* --- index --- */
+    if (forge_str_fmt(b,
+                      "void %s_index(ActionRequest *req, ActionResponse *res) {\n"
+                      "    DbConnection *conn;\n"
+                      "    DbStatement *st = NULL;\n"
+                      "    char *html;\n"
+                      "    char *p;\n"
+                      "    size_t len = 0;\n"
+                      "    size_t cap = 262144;\n"
+                      "    int any = 0;\n"
+                      "    const char *sql = \"SELECT id",
+                      resource_plural) != 0) {
+        return -1;
+    }
+
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        if (!attributes || !attributes[i]) {
+            return -1;
+        }
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) {
+            return -1;
+        }
+        str_to_lower(key, field, sizeof(field));
+        if (forge_str_fmt(b, ", %s", field) != 0) {
+            return -1;
+        }
+    }
+
+    if (forge_str_fmt(b,
+                      " FROM %s ORDER BY id ASC\";\n"
+                      "    (void)req;\n"
+                      "    conn = cortex_db_connection();\n"
+                      "    if (!conn) {\n"
+                      "        action_controller_render_text(res, 500, \"Database unavailable\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    html = (char *)malloc(cap);\n"
+                      "    if (!html) {\n"
+                      "        action_controller_render_text(res, 500, \"Out of memory\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    p = html;\n"
+                      "    len += (size_t)snprintf(p + len, cap - len, \"<h1>%%s</h1>\\n\", \"%s\");\n"
+                      "    len += (size_t)snprintf(p + len, cap - len, \"<p><a href=\\\"/%%s/new\\\">New %%s</a></p>\\n\", \"%s\", \"%s\");\n"
+                      "    len += (size_t)snprintf(p + len, cap - len, \"<table border=\\\"1\\\" cellpadding=\\\"6\\\" cellspacing=\\\"0\\\">\\n\");\n"
+                      "    len += (size_t)snprintf(p + len, cap - len, \"<thead><tr><th>id</th>\");\n",
+                      resource_plural,
+                      type_name,
+                      resource_plural,
+                      type_name) != 0) {
+        return -1;
+    }
+
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) {
+            return -1;
+        }
+        str_to_lower(key, field, sizeof(field));
+        if (forge_str_fmt(b,
+                          "    len += (size_t)snprintf(p + len, cap - len, \"<th>%%s</th>\", \"%s\");\n",
+                          field) != 0) {
+            return -1;
+        }
+    }
+
+    if (forge_str_fmt(b,
+                      "    len += (size_t)snprintf(p + len, cap - len, \"</tr></thead><tbody>\\n\");\n"
+                      "    if (db_connection_prepare(conn, sql, &st) != 0) {\n"
+                      "        free(html);\n"
+                      "        action_controller_render_text(res, 500, \"Database query failed\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    while (db_statement_step(st) == 1) {\n"
+                      "        int rid = db_statement_column_int(st, 0);\n"
+                      "        any = 1;\n"
+                      "        len += (size_t)snprintf(p + len, cap - len,\n"
+                      "            \"<tr><td><a href=\\\"/%%s/%%d\\\">%%d</a></td>\",\n"
+                      "            \"%s\", rid, rid);\n",
+                      resource_plural) != 0) {
+        return -1;
+    }
+
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        char typ[32];
+        int is_bool;
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) {
+            return -1;
+        }
+        str_to_lower(key, field, sizeof(field));
+        if (parse_attribute_type(attributes[i], typ, sizeof(typ)) != 0) {
+            return -1;
+        }
+        is_bool = (strcmp(typ, "boolean") == 0 || strcmp(typ, "bool") == 0);
+        if (is_bool) {
+            if (forge_str_fmt(b,
+                              "        {\n"
+                              "            int bv = db_statement_column_int(st, %d);\n"
+                              "            len += (size_t)snprintf(p + len, cap - len, \"<td>%%s</td>\", bv ? \"Yes\" : \"No\");\n"
+                              "        }\n",
+                              i + 1) != 0) {
+                return -1;
+            }
+        } else {
+            if (forge_str_fmt(b,
+                              "        {\n"
+                              "            char *ex = action_view_escape_html(db_statement_column_text(st, %d));\n"
+                              "            len += (size_t)snprintf(p + len, cap - len, \"<td>%%s</td>\", ex ? ex : \"\");\n"
+                              "            free(ex);\n"
+                              "        }\n",
+                              i + 1) != 0) {
+                return -1;
+            }
+        }
+    }
+
+    if (forge_str_fmt(b,
+                      "        len += (size_t)snprintf(p + len, cap - len, \"</tr>\\n\");\n"
+                      "        if (len >= cap - 4096) {\n"
+                      "            db_statement_finalize(st);\n"
+                      "            free(html);\n"
+                      "            action_controller_render_text(res, 500, \"Response too large\");\n"
+                      "            return;\n"
+                      "        }\n"
+                      "    }\n"
+                      "    db_statement_finalize(st);\n"
+                      "    if (!any) {\n"
+                      "        len += (size_t)snprintf(p + len, cap - len,\n"
+                      "            \"<tr><td colspan=\\\"%%d\\\">No records yet. <a href=\\\"/%%s/new\\\">Create one</a>.</td></tr>\\n\",\n"
+                      "            %d, \"%s\");\n"
+                      "    }\n"
+                      "    len += (size_t)snprintf(p + len, cap - len, \"</tbody></table>\\n\");\n"
+                      "    render_html(res, html);\n"
+                      "}\n\n",
+                      1 + attr_count,
+                      resource_plural) != 0) {
+        return -1;
+    }
+
+    /* --- show --- */
+    if (forge_str_fmt(b,
+                      "void %s_show(ActionRequest *req, ActionResponse *res) {\n"
+                      "    int rid = 0;\n"
+                      "    char path_fmt[128];\n"
+                      "    DbConnection *conn;\n"
+                      "    DbStatement *st = NULL;\n"
+                      "    char *html;\n"
+                      "    char *p;\n"
+                      "    size_t len = 0;\n"
+                      "    size_t cap = 65536;\n"
+                      "    const char *sql_one = \"SELECT id",
+                      resource_plural) != 0) {
+        return -1;
+    }
+
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) {
+            return -1;
+        }
+        str_to_lower(key, field, sizeof(field));
+        if (forge_str_fmt(b, ", %s", field) != 0) {
+            return -1;
+        }
+    }
+
+    if (forge_str_fmt(b,
+                      " FROM %s WHERE id = ?\";\n"
+                      "    (void)snprintf(path_fmt, sizeof(path_fmt), \"/%%s/%%%%d\", \"%s\");\n"
+                      "    if (sscanf(req->path, path_fmt, &rid) != 1) {\n"
+                      "        action_controller_render_text(res, 400, \"Bad request\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    conn = cortex_db_connection();\n"
+                      "    if (!conn) {\n"
+                      "        action_controller_render_text(res, 500, \"Database unavailable\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    html = (char *)malloc(cap);\n"
+                      "    if (!html) {\n"
+                      "        action_controller_render_text(res, 500, \"Out of memory\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    p = html;\n"
+                      "    if (db_connection_prepare(conn, sql_one, &st) != 0) {\n"
+                      "        free(html);\n"
+                      "        action_controller_render_text(res, 500, \"Database query failed\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    if (db_statement_bind_int(st, 1, rid) != 0) {\n"
+                      "        db_statement_finalize(st);\n"
+                      "        free(html);\n"
+                      "        action_controller_render_text(res, 500, \"Bind failed\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    if (db_statement_step(st) != 1) {\n"
+                      "        db_statement_finalize(st);\n"
+                      "        free(html);\n"
+                      "        action_controller_render_text(res, 404, \"Not found\");\n"
+                      "        return;\n"
+                      "    }\n"
+                      "    len += (size_t)snprintf(p + len, cap - len,\n"
+                      "        \"<h1>%%s</h1>\\n<dl>\\n\"\n"
+                      "        \"  <dt>id</dt><dd>%%d</dd>\\n\",\n"
+                      "        \"%s\", db_statement_column_int(st, 0));\n",
+                      resource_plural,
+                      resource_plural,
+                      type_name) != 0) {
+        return -1;
+    }
+
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        char typ[32];
+        int is_bool;
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) {
+            return -1;
+        }
+        str_to_lower(key, field, sizeof(field));
+        if (parse_attribute_type(attributes[i], typ, sizeof(typ)) != 0) {
+            return -1;
+        }
+        is_bool = (strcmp(typ, "boolean") == 0 || strcmp(typ, "bool") == 0);
+        if (is_bool) {
+            if (forge_str_fmt(b,
+                              "    len += (size_t)snprintf(p + len, cap - len,\n"
+                              "        \"  <dt>%s</dt><dd>%%s</dd>\\n\",\n"
+                              "        db_statement_column_int(st, %d) ? \"Yes\" : \"No\");\n",
+                              field,
+                              i + 1) != 0) {
+                return -1;
+            }
+        } else {
+            if (forge_str_fmt(b,
+                              "    {\n"
+                              "        char *ex = action_view_escape_html(db_statement_column_text(st, %d));\n"
+                              "        len += (size_t)snprintf(p + len, cap - len,\n"
+                              "            \"  <dt>%s</dt><dd>%%s</dd>\\n\",\n"
+                              "            ex ? ex : \"\");\n"
+                              "        free(ex);\n"
+                              "    }\n",
+                              i + 1,
+                              field) != 0) {
+                return -1;
+            }
+        }
+    }
+
+    if (forge_str_fmt(b,
+                      "    len += (size_t)snprintf(p + len, cap - len,\n"
+                      "        \"</dl>\\n<p><a href=\\\"/%s\\\">Back to list</a></p>\\n\");\n"
+                      "    db_statement_finalize(st);\n"
+                      "    render_html(res, html);\n"
+                      "}\n\n",
+                      resource_plural) != 0) {
+        return -1;
+    }
+
+    /* new, edit; create/update from POST body; delete stub */
+    if (forge_str_fmt(b,
+                      "void %s_new(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/new\"); }\n"
+                      "void %s_edit(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/edit\"); }\n",
+                      resource_plural,
+                      resource_plural,
+                      resource_plural,
+                      resource_plural) != 0) {
+        return -1;
+    }
+    if (forge_emit_scaffold_create_update(b, resource_plural, attr_count, attributes) != 0) {
+        return -1;
+    }
+    if (forge_str_fmt(b,
+                      "void %s_delete(ActionRequest *req, ActionResponse *res) { (void)req; action_controller_render_text(res, 200, \"deleted\"); }\n",
+                      resource_plural) != 0) {
+        return -1;
+    }
+
+    return 0;
+}
 
  static int ensure_dir(const char *path) {
      if (mkdir(path, 0755) == -1) {
@@ -333,6 +1070,113 @@ static int append_form_field(char *view_buf,
     return 0;
 }
 
+static const char *attr_sql_type(const char *lowercase_type) {
+    if (!lowercase_type || !lowercase_type[0]) {
+        return "TEXT";
+    }
+    if (strcmp(lowercase_type, "integer") == 0 || strcmp(lowercase_type, "int") == 0) {
+        return "INTEGER";
+    }
+    if (strcmp(lowercase_type, "float") == 0 || strcmp(lowercase_type, "decimal") == 0 ||
+        strcmp(lowercase_type, "real") == 0) {
+        return "REAL";
+    }
+    if (strcmp(lowercase_type, "boolean") == 0 || strcmp(lowercase_type, "bool") == 0) {
+        return "INTEGER";
+    }
+    return "TEXT";
+}
+
+static int write_default_application_layout_if_missing(void) {
+    static const char *path = "app/views/layouts/application.html";
+    FILE *f;
+    static const char *content =
+        "<!DOCTYPE html>\n"
+        "<html lang=\"en\">\n"
+        "<head>\n"
+        "  <meta charset=\"UTF-8\" />\n"
+        "  <title>Cortex App</title>\n"
+        "</head>\n"
+        "<body>\n"
+        "{{yield}}\n"
+        "</body>\n"
+        "</html>\n";
+
+    f = fopen(path, "r");
+    if (f) {
+        fclose(f);
+        return 0;
+    }
+    printf("forge_scaffold: generating layout at '%s'\n", path);
+    return write_template_file(path, content);
+}
+
+static int write_scaffold_sql_migration(const char *table_name, int attr_count, const char **attributes) {
+    char ts[32];
+    char path[512];
+    char sql_buf[8192];
+    size_t off;
+    time_t now;
+    struct tm *tm_info;
+    int i;
+
+    if (!table_name || !table_name[0]) {
+        return -1;
+    }
+    now = time(NULL);
+    tm_info = localtime(&now);
+    if (!tm_info) {
+        return -1;
+    }
+    if (strftime(ts, sizeof(ts), "%Y%m%d%H%M%S", tm_info) == 0) {
+        return -1;
+    }
+    if (snprintf(path, sizeof(path), "db/migrate/%s_create_%s.sql", ts, table_name) < 0) {
+        return -1;
+    }
+
+    off = (size_t)snprintf(sql_buf, sizeof(sql_buf),
+                           "CREATE TABLE %s (\n"
+                           "  id INTEGER PRIMARY KEY AUTOINCREMENT",
+                           table_name);
+    if (off >= sizeof(sql_buf)) {
+        return -1;
+    }
+
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        char type[32];
+        const char *sqlt;
+        if (!attributes || !attributes[i]) {
+            return -1;
+        }
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) {
+            return -1;
+        }
+        str_to_lower(key, field, sizeof(field));
+        if (parse_attribute_type(attributes[i], type, sizeof(type)) != 0) {
+            return -1;
+        }
+        sqlt = attr_sql_type(type);
+        off += (size_t)snprintf(sql_buf + off, sizeof(sql_buf) - off, ",\n  %s %s", field, sqlt);
+        if (off >= sizeof(sql_buf)) {
+            return -1;
+        }
+    }
+
+    off += (size_t)snprintf(sql_buf + off, sizeof(sql_buf) - off,
+                             ",\n  created_at DATETIME,\n"
+                             "  updated_at DATETIME\n"
+                             ");\n");
+    if (off >= sizeof(sql_buf)) {
+        return -1;
+    }
+
+    printf("forge_scaffold: generating SQL migration at '%s'\n", path);
+    return write_template_file(path, sql_buf);
+}
+
 /* Generate <resource> scaffold with model/controller/views/routes files. */
 int forge_generate_scaffold(const char *resource_name, int attr_count, const char **attributes) {
     char resource[64];
@@ -342,8 +1186,8 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
     char path[256];
     char views_dir[256];
     char model_buf[4096];
-    char controller_buf[2048];
     char routes_buf[4096];
+    ForgeStrBuf scaffold_controller_buf;
     int i;
     size_t len = 0;
 
@@ -361,10 +1205,22 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
     if (ensure_dir("app/models") != 0) return -1;
     if (ensure_dir("app/controllers") != 0) return -1;
     if (ensure_dir("app/views") != 0) return -1;
+    if (ensure_dir("app/views/layouts") != 0) return -1;
     if (snprintf(views_dir, sizeof(views_dir), "app/views/%s", resource_plural) < 0) return -1;
     if (ensure_dir(views_dir) != 0) return -1;
+    if (ensure_dir("db") != 0) return -1;
+    if (ensure_dir("db/migrate") != 0) return -1;
     if (ensure_dir("config") != 0) return -1;
     if (ensure_javascript_structure() != 0) return -1;
+
+    if (write_scaffold_sql_migration(resource_plural, attr_count, attributes) != 0) {
+        perror("forge_scaffold sql migration");
+        return -1;
+    }
+    if (write_default_application_layout_if_missing() != 0) {
+        perror("forge_scaffold layout");
+        return -1;
+    }
 
     /* model */
     if (snprintf(path, sizeof(path), "app/models/%s.c", resource) < 0) return -1;
@@ -396,47 +1252,40 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
     printf("forge_scaffold: generating model at '%s'\n", path);
     if (write_template_file(path, model_buf) != 0) { perror("forge_scaffold model"); return -1; }
 
-    /* controller */
+    /* controller (index/show query SQLite; render_html + layout) */
     if (snprintf(path, sizeof(path), "app/controllers/%s_controller.c", resource_plural) < 0) return -1;
-    if (snprintf(controller_buf, sizeof(controller_buf),
-                 "/* Auto-generated scaffold controller: %s */\n"
-                 "#include \"action_controller.h\"\n"
-                 "#include \"action_view.h\"\n\n"
-                 "void %s_index(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/index\"); }\n"
-                 "void %s_show(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/show\"); }\n"
-                 "void %s_new(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/new\"); }\n"
-                 "void %s_edit(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/edit\"); }\n"
-                 "void %s_create(ActionRequest *req, ActionResponse *res) { (void)req; action_controller_render_text(res, 201, \"created\"); }\n"
-                 "void %s_update(ActionRequest *req, ActionResponse *res) { (void)req; action_controller_render_text(res, 200, \"updated\"); }\n"
-                 "void %s_delete(ActionRequest *req, ActionResponse *res) { (void)req; action_controller_render_text(res, 200, \"deleted\"); }\n",
-                 resource_plural,
-                 resource_plural, resource_plural,
-                 resource_plural, resource_plural,
-                 resource_plural, resource_plural,
-                 resource_plural, resource_plural,
-                 resource_plural, resource_plural, resource_plural) < 0) return -1;
+    scaffold_controller_buf.p = NULL;
+    scaffold_controller_buf.len = 0;
+    scaffold_controller_buf.cap = 0;
+    if (forge_emit_scaffold_controller(&scaffold_controller_buf, resource, resource_plural, type_name, attr_count, attributes) != 0) {
+        forge_str_free(&scaffold_controller_buf);
+        return -1;
+    }
     printf("forge_scaffold: generating controller at '%s'\n", path);
-    if (write_template_file(path, controller_buf) != 0) { perror("forge_scaffold controller"); return -1; }
+    if (!scaffold_controller_buf.p || write_template_file(path, scaffold_controller_buf.p) != 0) {
+        forge_str_free(&scaffold_controller_buf);
+        perror("forge_scaffold controller");
+        return -1;
+    }
+    forge_str_free(&scaffold_controller_buf);
 
     /* views */
     {
         char view_buf[4096];
         size_t view_len = 0;
         if (snprintf(path, sizeof(path), "%s/index.html", views_dir) < 0) return -1;
-        if (snprintf(view_buf, sizeof(view_buf),
-                     "<h1 data-controller=\"%s\" data-%s-target=\"output\">%s</h1>\n"
-                     "<ul><li>Sample item</li></ul>\n"
-                     "<a href=\"/%s/new\">New</a>\n",
-                     resource, resource, resource_plural, resource_plural) < 0) return -1;
-        if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold index"); return -1; }
+        if (write_template_file(path,
+                                "<!-- Listing HTML is built in app/controllers/ — see *_index() (SQLite). -->\n") != 0) {
+            perror("forge_scaffold index");
+            return -1;
+        }
 
         if (snprintf(path, sizeof(path), "%s/show.html", views_dir) < 0) return -1;
-        if (snprintf(view_buf, sizeof(view_buf),
-                     "<h1>Show %s</h1>\n"
-                     "<p>Sample details</p>\n"
-                     "<a href=\"/%s\">Back</a>\n",
-                     resource, resource_plural) < 0) return -1;
-        if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold show"); return -1; }
+        if (write_template_file(path,
+                                "<!-- Show HTML is built in app/controllers/ — see *_show() (SQLite). -->\n") != 0) {
+            perror("forge_scaffold show");
+            return -1;
+        }
 
         if (snprintf(path, sizeof(path), "%s/new.html", views_dir) < 0) return -1;
         view_len = (size_t)snprintf(view_buf, sizeof(view_buf),
@@ -508,10 +1357,12 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
                  "    route_get(router, \"/%s/:id/edit\", %s_edit);\n"
                  "    route_get(router, \"/%s/:id\", %s_show);\n"
                  "    route_post(router, \"/%s\", %s_create);\n"
+                 "    route_post(router, \"/%s/:id\", %s_update);\n"
                  "    route_put(router, \"/%s/:id\", %s_update);\n"
                  "    route_delete(router, \"/%s/:id\", %s_delete);\n"
                  "}\n",
                  resource_plural, resource_plural, resource_plural, resource_plural, resource_plural, resource_plural, resource_plural,
+                 resource_plural, resource_plural,
                  resource_plural, resource_plural,
                  resource_plural, resource_plural,
                  resource_plural, resource_plural,
@@ -586,6 +1437,17 @@ int forge_new_project(const char *project_name) {
         "    (void)req;\n"
         "    render_view(res, \"home/index\");\n"
         "}\n";
+    const char *application_layout_content =
+        "<!DOCTYPE html>\n"
+        "<html lang=\"en\">\n"
+        "<head>\n"
+        "  <meta charset=\"UTF-8\" />\n"
+        "  <title>Cortex App</title>\n"
+        "</head>\n"
+        "<body>\n"
+        "{{yield}}\n"
+        "</body>\n"
+        "</html>\n";
     const char *home_view_content =
         "<!DOCTYPE html>\n"
         "<html lang=\"en\">\n"
@@ -745,6 +1607,12 @@ int forge_new_project(const char *project_name) {
     if (ensure_dir(path) != 0) {
         return -1;
     }
+    if (snprintf(path, sizeof(path), "%s/db/migrate", project_name) < 0) {
+        return -1;
+    }
+    if (ensure_dir(path) != 0) {
+        return -1;
+    }
     if (snprintf(path, sizeof(path), "%s/app/controllers", project_name) < 0) {
         return -1;
     }
@@ -752,6 +1620,12 @@ int forge_new_project(const char *project_name) {
         return -1;
     }
     if (snprintf(path, sizeof(path), "%s/app/views", project_name) < 0) {
+        return -1;
+    }
+    if (ensure_dir(path) != 0) {
+        return -1;
+    }
+    if (snprintf(path, sizeof(path), "%s/app/views/layouts", project_name) < 0) {
         return -1;
     }
     if (ensure_dir(path) != 0) {
@@ -842,6 +1716,12 @@ int forge_new_project(const char *project_name) {
         return -1;
     }
     if (write_template_file(path, home_view_content) != 0) {
+        return -1;
+    }
+    if (snprintf(path, sizeof(path), "%s/app/views/layouts/application.html", project_name) < 0) {
+        return -1;
+    }
+    if (write_template_file(path, application_layout_content) != 0) {
         return -1;
     }
     if (snprintf(path, sizeof(path), "%s/.cortex_project", project_name) < 0) {

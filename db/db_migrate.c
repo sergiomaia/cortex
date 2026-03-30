@@ -10,6 +10,7 @@
 
 #include "db_connection.h"
 #include "db_paths.h"
+#include "sql_migrate.h"
 
 static int ensure_dir(const char *path) {
     if (!path || path[0] == '\0') return -1;
@@ -276,6 +277,16 @@ static int db_migrate_sqlite_at_path(const char *storage_path, const DbMigration
     }
 
     active_migration_registry_free(&registry);
+
+    if (db_sql_migrations_run(conn) != 0) {
+        db_connection_close(conn);
+        return -1;
+    }
+
+    if (db_schema_write_dump(conn, "db/schema.sql") != 0) {
+        fprintf(stderr, "db: warning: could not write db/schema.sql\n");
+    }
+
     db_connection_close(conn);
 
     /* Treat rc==1 ("nothing pending") as success. */

@@ -11,6 +11,88 @@
 #define CORTEX_VERSION "0.0.0"
 #endif
 
+/* If app/views/layouts/application.html exists, replace {{yield}} with inner HTML. */
+static char *apply_layout_if_present(const char *inner_html) {
+    static const char path[] = "app/views/layouts/application.html";
+    static const char yield_tag[] = "{{yield}}";
+    FILE *f;
+    long len;
+    char *layout;
+    char *yield_pos;
+    size_t before_len;
+    size_t inner_len;
+    size_t after_len;
+    char *out;
+    size_t out_len;
+
+    if (!inner_html) {
+        return NULL;
+    }
+
+    f = fopen(path, "rb");
+    if (!f) {
+        return NULL;
+    }
+
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return NULL;
+    }
+    len = ftell(f);
+    if (len < 0) {
+        fclose(f);
+        return NULL;
+    }
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return NULL;
+    }
+
+    layout = (char *)malloc((size_t)len + 1);
+    if (!layout) {
+        fclose(f);
+        return NULL;
+    }
+    if (len > 0 && fread(layout, 1, (size_t)len, f) != (size_t)len) {
+        free(layout);
+        fclose(f);
+        return NULL;
+    }
+    layout[len] = '\0';
+    fclose(f);
+
+    yield_pos = strstr(layout, yield_tag);
+    if (!yield_pos) {
+        size_t n;
+        char *dup;
+        free(layout);
+        n = strlen(inner_html) + 1;
+        dup = (char *)malloc(n);
+        if (!dup) {
+            return NULL;
+        }
+        memcpy(dup, inner_html, n);
+        return dup;
+    }
+
+    inner_len = strlen(inner_html);
+    before_len = (size_t)(yield_pos - layout);
+    after_len = strlen(yield_pos + sizeof(yield_tag) - 1);
+
+    out_len = before_len + inner_len + after_len + 1;
+    out = (char *)malloc(out_len);
+    if (!out) {
+        free(layout);
+        return NULL;
+    }
+
+    memcpy(out, layout, before_len);
+    memcpy(out + before_len, inner_html, inner_len);
+    memcpy(out + before_len + inner_len, yield_pos + sizeof(yield_tag) - 1, after_len + 1);
+    free(layout);
+    return out;
+}
+
 static const char *c_standard_string(void) {
 #if defined(__STDC_VERSION__)
     /* Map common C standard versions to friendly labels. */
@@ -160,6 +242,97 @@ static char *render_home_index_html(void) {
     return out;
 }
 
+char *action_view_escape_html(const char *input) {
+    const unsigned char *p;
+    char *out;
+    size_t j;
+    size_t nalloc;
+
+    if (!input) {
+        input = "";
+    }
+
+    nalloc = 1;
+    for (p = (const unsigned char *)input; *p; p++) {
+        switch (*p) {
+        case '&':
+            nalloc += 5;
+            break;
+        case '<':
+        case '>':
+            nalloc += 4;
+            break;
+        case '"':
+            nalloc += 6;
+            break;
+        default:
+            nalloc += 1;
+            break;
+        }
+    }
+
+    out = (char *)malloc(nalloc);
+    if (!out) {
+        return NULL;
+    }
+
+    j = 0;
+    for (p = (const unsigned char *)input; *p; p++) {
+        switch (*p) {
+        case '&':
+            memcpy(out + j, "&amp;", 5);
+            j += 5;
+            break;
+        case '<':
+            memcpy(out + j, "&lt;", 4);
+            j += 4;
+            break;
+        case '>':
+            memcpy(out + j, "&gt;", 4);
+            j += 4;
+            break;
+        case '"':
+            memcpy(out + j, "&quot;", 6);
+            j += 6;
+            break;
+        default:
+            out[j++] = (char)*p;
+            break;
+        }
+    }
+    out[j] = '\0';
+    return out;
+}
+
+void render_html(ActionResponse *res, char *inner_html) {
+    char *buf;
+    char *wrapped;
+    char *with_assets;
+
+    if (!res) {
+        if (inner_html) {
+            free(inner_html);
+        }
+        return;
+    }
+    if (!inner_html) {
+        action_response_set(res, 500, "Internal error");
+        action_response_set_content_type(res, "text/plain");
+        return;
+    }
+
+    buf = inner_html;
+    wrapped = apply_layout_if_present(buf);
+    if (wrapped) {
+        free(buf);
+        buf = wrapped;
+    }
+
+    with_assets = action_assets_inject_javascript(buf);
+    action_response_set(res, 200, with_assets ? with_assets : buf);
+    action_response_set_content_type(res, "text/html");
+}
+
 void action_view_render(ActionView *view, const char *data, char *buffer, int buffer_size) {
     (void)view;
     (void)data;
@@ -245,6 +418,15 @@ void render_view(ActionResponse *res, const char *template_name) {
     }
     buf[len] = '\0';
     fclose(f);
+
+    /* Optional Rails-like layout: app/views/layouts/application.html with {{yield}} */
+    if (strcmp(template_name, "home/index") != 0) {
+        char *wrapped = apply_layout_if_present(buf);
+        if (wrapped) {
+            free(buf);
+            buf = wrapped;
+        }
+    }
 
     /* For all other templates, serve with JavaScript bootstrap injected. */
     {
