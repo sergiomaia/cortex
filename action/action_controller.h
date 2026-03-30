@@ -14,5 +14,8 @@ typedef struct {
 void action_controller_render_json(ActionResponse *res, int status, const char *json_body);
 void action_controller_render_text(ActionResponse *res, int status, const char *text_body);
 
+/* Single-threaded server: copies `location` into internal storage, then sets Location header. */
+void action_controller_render_redirect(ActionResponse *res, int status, const char *location);
+
 #endif /* ACTION_CONTROLLER_H */
 

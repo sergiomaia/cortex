@@ -1,5 +1,6 @@
 #include "../test_assert.h"
 #include "../../action/action_request.h"
+#include "../../action/action_request_form.h"
 #include "../../action/action_response.h"
 
 static void parse_simple_get_request(char *raw, ActionRequest *out_req) {
@@ -64,5 +65,20 @@ void test_action_response_set_formats_fields(void) {
 
     ASSERT_EQ(res.status, 201);
     ASSERT_STR_EQ(res.body, "created");
+    ASSERT_TRUE(res.location == NULL);
+}
+
+void test_action_request_form_get_decodes_urlencoded(void) {
+    char buf[64];
+
+    ASSERT_EQ(action_request_form_get("a=b+c&x=%20y", "a", buf, sizeof(buf)), 3);
+    ASSERT_STR_EQ(buf, "b c");
+    ASSERT_EQ(action_request_form_get("a=b+c&x=%20y", "x", buf, sizeof(buf)), 2);
+    ASSERT_STR_EQ(buf, " y");
+}
+
+void test_action_request_form_present_matches_names(void) {
+    ASSERT_EQ(action_request_form_present("published=on", "published"), 1);
+    ASSERT_EQ(action_request_form_present("title=hello", "published"), 0);
 }
 

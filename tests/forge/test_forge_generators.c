@@ -4,6 +4,7 @@
  #include <string.h>
  #include <sys/stat.h>
  #include <errno.h>
+ #include <glob.h>
  
  #include "../../forge/forge_generators.h"
  
@@ -22,6 +23,21 @@
          remove(path);
      }
  }
+
+ static void remove_glob_matches(const char *pattern) {
+     glob_t g;
+     size_t i;
+     int rc;
+
+     rc = glob(pattern, 0, NULL, &g);
+     if (rc != 0 && rc != GLOB_NOMATCH) {
+         return;
+     }
+     for (i = 0; i < g.gl_pathc; ++i) {
+         remove(g.gl_pathv[i]);
+     }
+     globfree(&g);
+ }
  
  /* Return 1 if path exists and contains substring, 0 otherwise. */
  static int file_contains(const char *path, const char *substring) {
@@ -39,6 +55,29 @@
      }
      fclose(f);
      return found;
+ }
+
+ static int any_migration_file_contains(const char *needle) {
+     glob_t g;
+     size_t i;
+     int rc;
+
+     rc = glob("db/migrate/*.sql", 0, NULL, &g);
+     if (rc != 0 && rc != GLOB_NOMATCH) {
+         return 0;
+     }
+     if (rc == GLOB_NOMATCH || g.gl_pathc == 0) {
+         globfree(&g);
+         return 0;
+     }
+     for (i = 0; i < g.gl_pathc; ++i) {
+         if (file_contains(g.gl_pathv[i], needle)) {
+             globfree(&g);
+             return 1;
+         }
+     }
+     globfree(&g);
+     return 0;
  }
  
  void test_forge_generate_controller_creates_file(void) {
@@ -113,16 +152,21 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     const char *controller_path = "app/controllers/posts_controller.c";
     const char *routes_path = "config/routes.c";
     const char *view_index_path = "app/views/posts/index.html";
+    const char *view_show_path = "app/views/posts/show.html";
     const char *view_new_path = "app/views/posts/new.html";
     const char *view_edit_path = "app/views/posts/edit.html";
+    const char *layout_path = "app/views/layouts/application.html";
     const char *stimulus_controller_path = "app/javascript/controllers/post_controller.js";
 
     remove_if_exists(model_path);
     remove_if_exists(controller_path);
     remove_if_exists(routes_path);
     remove_if_exists(view_index_path);
+    remove_if_exists(view_show_path);
     remove_if_exists(view_new_path);
     remove_if_exists(view_edit_path);
+    remove_if_exists(layout_path);
+    remove_glob_matches("db/migrate/*.sql");
     remove_if_exists(stimulus_controller_path);
 
     ASSERT_EQ(forge_generate_scaffold("Post", attr_count, attrs), 0);
@@ -131,9 +175,22 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_exists(controller_path));
     ASSERT_TRUE(file_exists(routes_path));
     ASSERT_TRUE(file_exists(view_index_path));
+    ASSERT_TRUE(file_exists(view_show_path));
     ASSERT_TRUE(file_exists(view_new_path));
     ASSERT_TRUE(file_exists(view_edit_path));
+    ASSERT_TRUE(file_exists(layout_path));
     ASSERT_TRUE(file_exists(stimulus_controller_path));
+
+    ASSERT_TRUE(file_contains(layout_path, "{{yield}}"));
+    ASSERT_TRUE(any_migration_file_contains("CREATE TABLE posts"));
+    ASSERT_TRUE(any_migration_file_contains("created_at"));
+    ASSERT_TRUE(file_contains(view_index_path, "SQLite"));
+    ASSERT_TRUE(file_contains(view_show_path, "SQLite"));
+    ASSERT_TRUE(file_contains(controller_path, "FROM posts"));
+    ASSERT_TRUE(file_contains(controller_path, "INSERT INTO posts"));
+    ASSERT_TRUE(file_contains(controller_path, "UPDATE posts SET"));
+    ASSERT_TRUE(file_contains(controller_path, "render_html"));
+    ASSERT_TRUE(file_contains(controller_path, "action_view_escape_html"));
 
     /* Fields should be parsed into active_model_set_field calls. */
     ASSERT_TRUE(file_contains(model_path, "post_set_title"));
@@ -152,6 +209,7 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_contains(routes_path, "app_register_routes"));
     ASSERT_TRUE(file_contains(routes_path, "route_get(router, \"/posts\", posts_index)"));
     ASSERT_TRUE(file_contains(routes_path, "route_post(router, \"/posts\", posts_create)"));
+    ASSERT_TRUE(file_contains(routes_path, "route_post(router, \"/posts/:id\", posts_update)"));
     ASSERT_TRUE(file_contains(routes_path, "route_put(router, \"/posts/:id\", posts_update)"));
 
     /* new/edit views should include scaffold form fields from attributes. */
@@ -177,8 +235,11 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     remove_if_exists(controller_path);
     remove_if_exists(routes_path);
     remove_if_exists(view_index_path);
+    remove_if_exists(view_show_path);
     remove_if_exists(view_new_path);
     remove_if_exists(view_edit_path);
+    remove_if_exists(layout_path);
+    remove_glob_matches("db/migrate/*.sql");
     remove_if_exists(stimulus_controller_path);
 }
  
