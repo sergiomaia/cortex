@@ -70,6 +70,57 @@
          globfree(&g);
          return 0;
      }
+
+static char *read_file_alloc(const char *path) {
+    FILE *f;
+    long sz;
+    size_t nread;
+    char *buf;
+
+    f = fopen(path, "rb");
+    if (!f) return NULL;
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return NULL;
+    }
+    sz = ftell(f);
+    if (sz < 0) {
+        fclose(f);
+        return NULL;
+    }
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return NULL;
+    }
+    buf = (char *)malloc((size_t)sz + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    nread = fread(buf, 1, (size_t)sz, f);
+    fclose(f);
+    if (nread != (size_t)sz) {
+        free(buf);
+        return NULL;
+    }
+    buf[sz] = '\0';
+    return buf;
+}
+
+static int write_file_from_string(const char *path, const char *content) {
+    FILE *f;
+    size_t len;
+    size_t nwritten;
+
+    if (!path || !content) return -1;
+    f = fopen(path, "wb");
+    if (!f) return -1;
+    len = strlen(content);
+    nwritten = fwrite(content, 1, len, f);
+    if (fclose(f) != 0) return -1;
+    if (nwritten != len) return -1;
+    return 0;
+}
      for (i = 0; i < g.gl_pathc; ++i) {
          if (file_contains(g.gl_pathv[i], needle)) {
              globfree(&g);
@@ -149,6 +200,7 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     const int attr_count = 4;
 
     const char *model_path = "app/models/post.c";
+    const char *neural_path = "app/neural/post_neural_model.c";
     const char *controller_path = "app/controllers/posts_controller.c";
     const char *routes_path = "config/routes.c";
     const char *view_index_path = "app/views/posts/index.html";
@@ -157,10 +209,20 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     const char *view_edit_path = "app/views/posts/edit.html";
     const char *layout_path = "app/views/layouts/application.html";
     const char *stimulus_controller_path = "app/javascript/controllers/post_controller.js";
+    int had_routes_file = file_exists(routes_path);
+    char *routes_backup = NULL;
+
+    if (had_routes_file) {
+        routes_backup = read_file_alloc(routes_path);
+        ASSERT_TRUE(routes_backup != NULL);
+    }
 
     remove_if_exists(model_path);
+    remove_if_exists(neural_path);
     remove_if_exists(controller_path);
-    remove_if_exists(routes_path);
+    if (!had_routes_file) {
+        remove_if_exists(routes_path);
+    }
     remove_if_exists(view_index_path);
     remove_if_exists(view_show_path);
     remove_if_exists(view_new_path);
@@ -172,6 +234,7 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_EQ(forge_generate_scaffold("Post", attr_count, attrs), 0);
 
     ASSERT_TRUE(file_exists(model_path));
+    ASSERT_TRUE(file_exists(neural_path));
     ASSERT_TRUE(file_exists(controller_path));
     ASSERT_TRUE(file_exists(routes_path));
     ASSERT_TRUE(file_exists(view_index_path));
@@ -197,6 +260,9 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_contains(model_path, "active_model_set_field(m, \"title\", title)"));
     ASSERT_TRUE(file_contains(model_path, "post_set_body"));
     ASSERT_TRUE(file_contains(model_path, "active_model_set_field(m, \"body\", body)"));
+    ASSERT_TRUE(file_contains(neural_path, "post_neural_system_prompt"));
+    ASSERT_TRUE(file_contains(neural_path, "post_neural_enrich"));
+    ASSERT_TRUE(file_contains(neural_path, "Starting point for AI features"));
 
     /* Controller REST-style stubs should exist. */
     ASSERT_TRUE(file_contains(controller_path, "void posts_index("));
@@ -232,8 +298,13 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_contains(view_edit_path, "<input type=\"checkbox\" id=\"published\" name=\"published\" />"));
 
     remove_if_exists(model_path);
+    remove_if_exists(neural_path);
     remove_if_exists(controller_path);
-    remove_if_exists(routes_path);
+    if (had_routes_file && routes_backup) {
+        ASSERT_EQ(write_file_from_string(routes_path, routes_backup), 0);
+    } else {
+        remove_if_exists(routes_path);
+    }
     remove_if_exists(view_index_path);
     remove_if_exists(view_show_path);
     remove_if_exists(view_new_path);
@@ -241,5 +312,6 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     remove_if_exists(layout_path);
     remove_glob_matches("db/migrate/*.sql");
     remove_if_exists(stimulus_controller_path);
+    free(routes_backup);
 }
  
