@@ -1177,6 +1177,57 @@ static int write_scaffold_sql_migration(const char *table_name, int attr_count, 
     return write_template_file(path, sql_buf);
 }
 
+static int write_scaffold_neural_template(const char *resource, const char *resource_plural) {
+    char path[256];
+    char neural_buf[2048];
+    size_t len;
+
+    if (!resource || !resource[0] || !resource_plural || !resource_plural[0]) {
+        return -1;
+    }
+    if (snprintf(path, sizeof(path), "app/neural/%s_neural_model.c", resource) < 0) {
+        return -1;
+    }
+
+    len = (size_t)snprintf(neural_buf, sizeof(neural_buf),
+                           "/* Auto-generated scaffold neural entry: %s */\n"
+                           "#include \"core/neural_model.h\"\n\n"
+                           "/*\n"
+                           " * Starting point for AI features connected to %s.\n"
+                           " *\n"
+                           " * Suggested next steps:\n"
+                           " * 1) Define the system prompt with domain rules.\n"
+                           " * 2) Build context from your local data before each call.\n"
+                           " * 3) Map AI outputs back to deterministic app actions.\n"
+                           " */\n"
+                           "static const char *%s_system_prompt =\n"
+                           "    \"You are an assistant for %s records. \"\n"
+                           "    \"Answer with concise language and include key business rules.\";\n\n"
+                           "const char *%s_neural_system_prompt(void) {\n"
+                           "    return %s_system_prompt;\n"
+                           "}\n\n"
+                           "void %s_neural_enrich(NeuralModel *model) {\n"
+                           "    (void)model;\n"
+                           "    /* TODO: configure provider/model settings for %s features. */\n"
+                           "    /* TODO: enrich prompt context with relevant %s data. */\n"
+                           "}\n",
+                           resource,
+                           resource_plural,
+                           resource,
+                           resource_plural,
+                           resource,
+                           resource,
+                           resource,
+                           resource_plural,
+                           resource_plural);
+    if (len >= sizeof(neural_buf)) {
+        return -1;
+    }
+
+    printf("forge_scaffold: generating neural file at '%s'\n", path);
+    return write_template_file(path, neural_buf);
+}
+
 /* Generate <resource> scaffold with model/controller/views/routes files. */
 int forge_generate_scaffold(const char *resource_name, int attr_count, const char **attributes) {
     char resource[64];
@@ -1203,6 +1254,7 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
 
     if (ensure_dir("app") != 0) return -1;
     if (ensure_dir("app/models") != 0) return -1;
+    if (ensure_dir("app/neural") != 0) return -1;
     if (ensure_dir("app/controllers") != 0) return -1;
     if (ensure_dir("app/views") != 0) return -1;
     if (ensure_dir("app/views/layouts") != 0) return -1;
@@ -1251,6 +1303,10 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
     }
     printf("forge_scaffold: generating model at '%s'\n", path);
     if (write_template_file(path, model_buf) != 0) { perror("forge_scaffold model"); return -1; }
+    if (write_scaffold_neural_template(resource, resource_plural) != 0) {
+        perror("forge_scaffold neural");
+        return -1;
+    }
 
     /* controller (index/show query SQLite; render_html + layout) */
     if (snprintf(path, sizeof(path), "app/controllers/%s_controller.c", resource_plural) < 0) return -1;

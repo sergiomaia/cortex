@@ -259,6 +259,7 @@ Example:
 In addition to model/controller/views/routes, Cortex also generates:
 
 - `app/javascript/controllers/post_controller.js`
+- `app/neural/post_neural_model.c` (AI integration starter template)
 - Stimulus-style attributes in scaffolded HTML:
   - `data-controller`
   - `data-action` (for example `submit->post#submit`)
