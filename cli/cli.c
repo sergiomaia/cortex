@@ -43,6 +43,26 @@ static int has_suffix(const char *s, const char *suffix) {
     return strcmp(s + (ls - lsf), suffix) == 0;
 }
 
+static const char *javascript_entrypoint_path(void) {
+    if (access("app/javascript/application.jsx", F_OK) == 0) {
+        return "app/javascript/application.jsx";
+    }
+    return "app/javascript/application.js";
+}
+
+static int ensure_frontend_dependencies_installed(void) {
+    if (access("package.json", F_OK) != 0) {
+        return 0;
+    }
+    if (access("node_modules/react/package.json", F_OK) == 0 &&
+        access("node_modules/react-dom/package.json", F_OK) == 0 &&
+        access("node_modules/esbuild/package.json", F_OK) == 0) {
+        return 0;
+    }
+    printf("assets: installing frontend dependencies (react, react-dom, esbuild)\n");
+    return system("npm install") == 0 ? 0 : -1;
+}
+
 static int write_controllers_registry(void) {
     DIR *dir;
     struct dirent *ent;
@@ -114,6 +134,11 @@ static int build_js_bundle(int watch_mode) {
     const char *watch = watch_mode ? "--watch" : "";
     char command[4096];
 
+    if (ensure_frontend_dependencies_installed() != 0) {
+        fprintf(stderr, "assets: failed to install frontend dependencies\n");
+        return -1;
+    }
+
     if (write_controllers_registry() != 0) {
         fprintf(stderr, "assets: failed to build controller registry\n");
         return -1;
@@ -123,9 +148,9 @@ static int build_js_bundle(int watch_mode) {
 
     if (snprintf(command, sizeof(command),
                  "rm -f public/assets/application*.js public/assets/manifest.json && "
-                 "npx esbuild app/javascript/application.js --bundle --format=esm --outdir=public/assets --entry-names=%s %s %s %s && "
+                 "npx esbuild %s --bundle --format=esm --outdir=public/assets --entry-names=%s %s %s %s && "
                  "node -e \"const fs=require('fs');const p='public/assets';const files=fs.readdirSync(p).filter(f=>/^application.*\\\\.js$/.test(f)).sort();const file=files[files.length-1]||'application.js';fs.writeFileSync(p+'/manifest.json',JSON.stringify({'application.js':file,environment:'%s'},null,2));\"",
-                 entry_names, sourcemap, minify, watch, mode_dir) < 0) {
+                 javascript_entrypoint_path(), entry_names, sourcemap, minify, watch, mode_dir) < 0) {
         return -1;
     }
     return system(command) == 0 ? 0 : -1;
@@ -140,6 +165,7 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
     out->name = NULL;
     out->attributes = NULL;
     out->attribute_count = 0;
+    out->use_react = 1;
 
     /* argv[0] is the program name, argv[1] is the first word. */
     if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "version") == 0) {
@@ -190,29 +216,44 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
         }
 
         if (argc >= 5 && strcmp(argv[2], "scaffold") == 0) {
-            int attr_count;
+            int i;
+            int attr_count = 0;
+            int seen_flag = 0;
             const char **attributes;
 
             out->command = CLI_COMMAND_GENERATE_SCAFFOLD;
             out->name = argv[3]; /* resource name, e.g. Post */
-
-            attr_count = argc - 4;
+            out->use_react = 1;
             attributes = (const char **)&argv[4];
 
             /* Validate tokens look like field:type. */
-            if (attr_count <= 0) {
-                return -1;
-            }
-
-            for (int i = 0; i < attr_count; ++i) {
-                const char *tok = attributes[i];
+            for (i = 4; i < argc; ++i) {
+                const char *tok = argv[i];
                 const char *colon;
 
                 if (!tok) return -1;
+                if (strcmp(tok, "--react") == 0) {
+                    out->use_react = 1;
+                    seen_flag = 1;
+                    continue;
+                }
+                if (strcmp(tok, "--no-react") == 0) {
+                    out->use_react = 0;
+                    seen_flag = 1;
+                    continue;
+                }
+                if (seen_flag) {
+                    return -1;
+                }
                 colon = strchr(tok, ':');
                 if (!colon || colon == tok || colon[1] == '\0') {
                     return -1;
                 }
+                ++attr_count;
+            }
+
+            if (attr_count <= 0) {
+                return -1;
             }
 
             out->attributes = attributes;
@@ -339,7 +380,7 @@ static int cli_handle_generate_controller(const char *name) {
     return 0;
 }
 
-static int cli_handle_generate_scaffold(const char *name, int attr_count, const char **attributes) {
+static int cli_handle_generate_scaffold(const char *name, int attr_count, const char **attributes, int use_react) {
     if (!name || name[0] == '\0') {
         return -1;
     }
@@ -357,7 +398,7 @@ static int cli_handle_generate_scaffold(const char *name, int attr_count, const 
         }
     }
 
-    return forge_generate_scaffold(name, attr_count, attributes);
+    return forge_generate_scaffold(name, attr_count, attributes, use_react);
 }
 
 static int cli_handle_generate_stimulus(const char *name) {
@@ -374,13 +415,15 @@ static int cli_handle_assets_build(void) {
 static int cli_handle_dev(void) {
     char command[4096];
     printf("dev: running JavaScript watcher and server\n");
+    if (ensure_frontend_dependencies_installed() != 0) return -1;
     if (write_controllers_registry() != 0) return -1;
     if (ensure_dir_if_missing("public") != 0) return -1;
     if (ensure_dir_if_missing("public/assets") != 0) return -1;
     if (snprintf(command, sizeof(command),
                  "rm -f public/assets/application.js public/assets/manifest.json && "
-                 "npx esbuild app/javascript/application.js --bundle --format=esm --outfile=public/assets/application.js --sourcemap --watch >/tmp/cortex-js-watch.log 2>&1 & "
-                 "node -e \"const fs=require('fs');const p='public/assets';fs.writeFileSync(p+'/manifest.json',JSON.stringify({'application.js':'application.js',environment:'development'},null,2));\"") < 0) {
+                 "npx esbuild %s --bundle --format=esm --outfile=public/assets/application.js --sourcemap --watch >/tmp/cortex-js-watch.log 2>&1 & "
+                 "node -e \"const fs=require('fs');const p='public/assets';fs.writeFileSync(p+'/manifest.json',JSON.stringify({'application.js':'application.js',environment:'development'},null,2));\"",
+                 javascript_entrypoint_path()) < 0) {
         return -1;
     }
     if (system(command) != 0) return -1;
@@ -417,7 +460,7 @@ int cli_dispatch(const CliParsed *parsed) {
     case CLI_COMMAND_GENERATE_CONTROLLER:
         return cli_handle_generate_controller(parsed->name);
     case CLI_COMMAND_GENERATE_SCAFFOLD:
-        return cli_handle_generate_scaffold(parsed->name, parsed->attribute_count, parsed->attributes);
+        return cli_handle_generate_scaffold(parsed->name, parsed->attribute_count, parsed->attributes, parsed->use_react);
     case CLI_COMMAND_GENERATE_STIMULUS:
         return cli_handle_generate_stimulus(parsed->name);
     case CLI_COMMAND_DEV:
@@ -444,7 +487,7 @@ int cli_run(int argc, char **argv) {
         fprintf(stderr, "  %s generate <name>\n", argv[0]);
         fprintf(stderr, "  %s generate controller <name>\n", argv[0]);
         fprintf(stderr, "  %s generate stimulus <name>\n", argv[0]);
-        fprintf(stderr, "  %s generate scaffold <Name> field:type field:type\n", argv[0]);
+        fprintf(stderr, "  %s generate scaffold <Name> field:type field:type [--react|--no-react]\n", argv[0]);
         fprintf(stderr, "  %s assets:build\n", argv[0]);
         fprintf(stderr, "  %s dev\n", argv[0]);
         fprintf(stderr, "  %s db:migrate\n", argv[0]);

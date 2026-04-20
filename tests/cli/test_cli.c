@@ -51,6 +51,24 @@ static char **make_argv6(const char *a0, const char *a1, const char *a2, const c
     return argv;
 }
 
+static char **make_argv7(const char *a0, const char *a1, const char *a2, const char *a3, const char *a4, const char *a5, const char *a6, int *out_argc) {
+    int argc = 0;
+    char **argv = (char **)calloc(8, sizeof(char *));
+    if (!argv) {
+        *out_argc = 0;
+        return NULL;
+    }
+    if (a0) argv[argc++] = dup_cstr(a0);
+    if (a1) argv[argc++] = dup_cstr(a1);
+    if (a2) argv[argc++] = dup_cstr(a2);
+    if (a3) argv[argc++] = dup_cstr(a3);
+    if (a4) argv[argc++] = dup_cstr(a4);
+    if (a5) argv[argc++] = dup_cstr(a5);
+    if (a6) argv[argc++] = dup_cstr(a6);
+    *out_argc = argc;
+    return argv;
+}
+
 static void free_argv(char **argv, int argc) {
     int i;
     if (!argv) {
@@ -134,6 +152,20 @@ void test_cli_parse_generate_stimulus_command(void) {
     free_argv(argv, argc);
 }
 
+void test_cli_parse_generate_scaffold_react_flags(void) {
+    int argc;
+    char **argv = make_argv7("cortex", "generate", "scaffold", "Post", "title:string", "body:text", "--no-react", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_SCAFFOLD);
+    ASSERT_STR_EQ(parsed.name, "Post");
+    ASSERT_EQ(parsed.attribute_count, 2);
+    ASSERT_EQ(parsed.use_react, 0);
+
+    free_argv(argv, argc);
+}
+
 void test_cli_parse_new_command(void) {
     int argc;
     char **argv = make_argv("cortex", "new", "myapp", NULL, &argc);
@@ -180,6 +212,23 @@ static int dir_exists(const char *path) {
     return S_ISDIR(st.st_mode) ? 1 : 0;
 }
 
+static int file_contains(const char *path, const char *substring) {
+    FILE *f;
+    char buf[1024];
+    size_t sublen;
+    int found = 0;
+
+    f = fopen(path, "r");
+    if (f == NULL) return 0;
+    sublen = strlen(substring);
+    if (sublen == 0) { fclose(f); return 1; }
+    while (fgets(buf, (int)sizeof(buf), f) != NULL && !found) {
+        if (strstr(buf, substring) != NULL) found = 1;
+    }
+    fclose(f);
+    return found;
+}
+
 /* Remove generated project dir and contents so tests don't leave artifacts. */
 static void remove_project_dir(const char *project_name) {
     char path[256];
@@ -189,12 +238,20 @@ static void remove_project_dir(const char *project_name) {
     remove_if_exists(path);
     if (snprintf(path, sizeof(path), "%s/.cortex_project", project_name) < 0) return;
     remove_if_exists(path);
+    if (snprintf(path, sizeof(path), "%s/package.json", project_name) < 0) return;
+    remove_if_exists(path);
     if (snprintf(path, sizeof(path), "%s/app/javascript/application.js", project_name) < 0) return;
+    remove_if_exists(path);
+    if (snprintf(path, sizeof(path), "%s/app/javascript/application.jsx", project_name) < 0) return;
     remove_if_exists(path);
     if (snprintf(path, sizeof(path), "%s/app/javascript/controllers/index.js", project_name) < 0) return;
     remove_if_exists(path);
+    if (snprintf(path, sizeof(path), "%s/app/javascript/resources/index.jsx", project_name) < 0) return;
+    remove_if_exists(path);
     if (snprintf(path, sizeof(path), "%s/app", project_name) < 0) return;
     if (snprintf(path, sizeof(path), "%s/app/javascript/controllers", project_name) < 0) return;
+    rmdir(path);
+    if (snprintf(path, sizeof(path), "%s/app/javascript/resources", project_name) < 0) return;
     rmdir(path);
     if (snprintf(path, sizeof(path), "%s/app/javascript", project_name) < 0) return;
     rmdir(path);
@@ -282,6 +339,10 @@ void test_forge_new_creates_project_directory(void) {
 
     snprintf(path, sizeof(path), "%s/main.c", project_name);
     ASSERT_TRUE(file_exists(path));
+    snprintf(path, sizeof(path), "%s/package.json", project_name);
+    ASSERT_TRUE(file_exists(path));
+    snprintf(path, sizeof(path), "%s/app/javascript/application.jsx", project_name);
+    ASSERT_TRUE(file_exists(path));
     snprintf(path, sizeof(path), "%s/app", project_name);
     ASSERT_TRUE(dir_exists(path));
     snprintf(path, sizeof(path), "%s/config", project_name);
@@ -306,6 +367,13 @@ void test_forge_new_creates_main_c_and_makefile(void) {
     ASSERT_TRUE(file_exists(path));
     snprintf(path, sizeof(path), "%s/Makefile", project_name);
     ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "server: cortex_app assets-build"));
+    ASSERT_TRUE(file_contains(path, "$(CORTEX_ROOT)/cortex assets:build"));
+    ASSERT_TRUE(file_contains(path, "$(CORTEX_ROOT)/cortex dev"));
+    snprintf(path, sizeof(path), "%s/package.json", project_name);
+    ASSERT_TRUE(file_exists(path));
+    snprintf(path, sizeof(path), "%s/app/javascript/application.jsx", project_name);
+    ASSERT_TRUE(file_exists(path));
 
     remove_project_dir(project_name);
 }
@@ -325,6 +393,10 @@ void test_cli_dispatch_new_creates_project(void) {
     snprintf(path, sizeof(path), "%s/main.c", project_name);
     ASSERT_TRUE(file_exists(path));
     snprintf(path, sizeof(path), "%s/Makefile", project_name);
+    ASSERT_TRUE(file_exists(path));
+    snprintf(path, sizeof(path), "%s/package.json", project_name);
+    ASSERT_TRUE(file_exists(path));
+    snprintf(path, sizeof(path), "%s/app/javascript/application.jsx", project_name);
     ASSERT_TRUE(file_exists(path));
     snprintf(path, sizeof(path), "%s/app", project_name);
     ASSERT_TRUE(dir_exists(path));
