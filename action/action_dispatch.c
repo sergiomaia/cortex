@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -11,6 +12,7 @@
 #include "action_router.h"
 #include "action_middleware.h"
 #include "action_assets.h"
+#include "action_request_form.h"
 #include "../core/core_config.h"
 
 #define HTTP_REQ_MAX 65536
@@ -154,10 +156,27 @@ static const char *http_status_text(int status) {
 
 int action_dispatch(ActionRouter *router, ActionRequest *req, ActionResponse *res) {
     ActionHandler handler;
+    const char *effective_method;
+    char method_override[16];
+    int i;
     if (!router || !req || !res) {
         return -1;
     }
-    handler = action_router_match(router, req->method, req->path);
+    effective_method = req->method;
+    if (req->method && strcmp(req->method, "POST") == 0 &&
+        req->body && req->body[0] &&
+        action_request_form_get(req->body, "_method", method_override, sizeof(method_override)) >= 0) {
+        for (i = 0; method_override[i]; ++i) {
+            method_override[i] = (char)toupper((unsigned char)method_override[i]);
+        }
+        if (strcmp(method_override, "PUT") == 0 ||
+            strcmp(method_override, "PATCH") == 0 ||
+            strcmp(method_override, "DELETE") == 0) {
+            effective_method = method_override;
+        }
+    }
+    req->method = effective_method;
+    handler = action_router_match(router, effective_method, req->path);
     if (!handler) {
         action_response_set(res, 404, "Not Found");
         return -1;

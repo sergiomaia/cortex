@@ -13,6 +13,10 @@
  #include <stdarg.h>
  
 static int ensure_javascript_structure(void);
+static int write_scaffold_react_resource_files(const char *resource,
+                                               const char *resource_plural,
+                                               int attr_count,
+                                               const char **attributes);
 
 typedef struct {
     char *p;
@@ -749,6 +753,377 @@ static int forge_emit_scaffold_controller(ForgeStrBuf *b,
     return 0;
 }
 
+static int forge_emit_scaffold_controller_react(ForgeStrBuf *b,
+                                                const char *resource_plural,
+                                                int attr_count,
+                                                const char **attributes) {
+    int i;
+
+    if (forge_str_fmt(
+            b,
+            "/* Auto-generated React scaffold controller: %s */\n"
+            "#include \"action_controller.h\"\n"
+            "#include \"action_view.h\"\n"
+            "#include \"action_request_form.h\"\n"
+            "#include \"action_response.h\"\n"
+            "#include \"db/db_bootstrap.h\"\n"
+            "#include \"db/db_connection.h\"\n\n"
+            "#include <stdio.h>\n"
+            "#include <stdlib.h>\n"
+            "#include <string.h>\n\n"
+            "static char *json_escape(const char *input) {\n"
+            "    const unsigned char *p;\n"
+            "    size_t cap = 1;\n"
+            "    size_t len = 0;\n"
+            "    char *out;\n"
+            "    if (!input) input = \"\";\n"
+            "    for (p = (const unsigned char *)input; *p; ++p) {\n"
+            "        switch (*p) {\n"
+            "        case '\\\\':\n"
+            "        case '\"':\n"
+            "            cap += 2;\n"
+            "            break;\n"
+            "        case '\\n':\n"
+            "        case '\\r':\n"
+            "        case '\\t':\n"
+            "            cap += 2;\n"
+            "            break;\n"
+            "        default:\n"
+            "            cap += 1;\n"
+            "            break;\n"
+            "        }\n"
+            "    }\n"
+            "    out = (char *)malloc(cap);\n"
+            "    if (!out) return NULL;\n"
+            "    for (p = (const unsigned char *)input; *p; ++p) {\n"
+            "        switch (*p) {\n"
+            "        case '\\\\': out[len++]='\\\\'; out[len++]='\\\\'; break;\n"
+            "        case '\"': out[len++]='\\\\'; out[len++]='\"'; break;\n"
+            "        case '\\n': out[len++]='\\\\'; out[len++]='n'; break;\n"
+            "        case '\\r': out[len++]='\\\\'; out[len++]='r'; break;\n"
+            "        case '\\t': out[len++]='\\\\'; out[len++]='t'; break;\n"
+            "        default: out[len++]=(char)*p; break;\n"
+            "        }\n"
+            "    }\n"
+            "    out[len] = '\\0';\n"
+            "    return out;\n"
+            "}\n\n",
+            resource_plural) != 0) {
+        return -1;
+    }
+
+    if (forge_str_fmt(
+            b,
+            "void %s_index(ActionRequest *req, ActionResponse *res) {\n"
+            "    DbConnection *conn;\n"
+            "    DbStatement *st = NULL;\n"
+            "    char *json;\n"
+            "    size_t len = 0;\n"
+            "    size_t cap = 262144;\n"
+            "    int first = 1;\n"
+            "    const char *sql = \"SELECT id",
+            resource_plural) != 0) {
+        return -1;
+    }
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) return -1;
+        str_to_lower(key, field, sizeof(field));
+        if (forge_str_fmt(b, ", %s", field) != 0) return -1;
+    }
+    if (forge_str_fmt(
+            b,
+            " FROM %s ORDER BY id ASC\";\n"
+            "    if (!req || !req->path) {\n"
+            "        action_controller_render_text(res, 400, \"Bad request\");\n"
+            "        return;\n"
+            "    }\n"
+            "    if (strstr(req->path, \".json\") == NULL) {\n"
+            "        render_view(res, \"%s/index\");\n"
+            "        return;\n"
+            "    }\n"
+            "    conn = cortex_db_connection();\n"
+            "    if (!conn) {\n"
+            "        action_controller_render_text(res, 500, \"Database unavailable\");\n"
+            "        return;\n"
+            "    }\n"
+            "    json = (char *)malloc(cap);\n"
+            "    if (!json) {\n"
+            "        action_controller_render_text(res, 500, \"Out of memory\");\n"
+            "        return;\n"
+            "    }\n"
+            "    len += (size_t)snprintf(json + len, cap - len, \"{\\\"data\\\":[\");\n"
+            "    if (db_connection_prepare(conn, sql, &st) != 0) {\n"
+            "        free(json);\n"
+            "        action_controller_render_text(res, 500, \"Database query failed\");\n"
+            "        return;\n"
+            "    }\n"
+            "    while (db_statement_step(st) == 1) {\n"
+            "        if (!first) {\n"
+            "            len += (size_t)snprintf(json + len, cap - len, \",\");\n"
+            "        }\n"
+            "        first = 0;\n"
+            "        len += (size_t)snprintf(json + len, cap - len, \"{\\\"id\\\":%%d\", db_statement_column_int(st, 0));\n",
+            resource_plural,
+            resource_plural) != 0) {
+        return -1;
+    }
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        char typ[32];
+        int is_bool;
+        int is_int;
+        int is_real;
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) return -1;
+        str_to_lower(key, field, sizeof(field));
+        if (parse_attribute_type(attributes[i], typ, sizeof(typ)) != 0) return -1;
+        is_bool = (strcmp(typ, "boolean") == 0 || strcmp(typ, "bool") == 0);
+        is_int = (strcmp(typ, "integer") == 0 || strcmp(typ, "int") == 0);
+        is_real = (strcmp(typ, "float") == 0 || strcmp(typ, "decimal") == 0 || strcmp(typ, "real") == 0);
+        if (is_bool) {
+            if (forge_str_fmt(
+                    b,
+                    "        len += (size_t)snprintf(json + len, cap - len, \",\\\"%s\\\":%%s\", db_statement_column_int(st, %d) ? \"true\" : \"false\");\n",
+                    field,
+                    i + 1) != 0) return -1;
+        } else if (is_int) {
+            if (forge_str_fmt(
+                    b,
+                    "        len += (size_t)snprintf(json + len, cap - len, \",\\\"%s\\\":%%d\", db_statement_column_int(st, %d));\n",
+                    field,
+                    i + 1) != 0) return -1;
+        } else if (is_real) {
+            if (forge_str_fmt(
+                    b,
+                    "        {\n"
+                    "            char *ev = json_escape(db_statement_column_text(st, %d));\n"
+                    "            len += (size_t)snprintf(json + len, cap - len, \",\\\"%s\\\":%%s\", ev ? ev : \"0\");\n"
+                    "            free(ev);\n"
+                    "        }\n",
+                    i + 1,
+                    field) != 0) return -1;
+        } else {
+            if (forge_str_fmt(
+                    b,
+                    "        {\n"
+                    "            char *ev = json_escape(db_statement_column_text(st, %d));\n"
+                    "            len += (size_t)snprintf(json + len, cap - len, \",\\\"%s\\\":\\\"%%s\\\"\", ev ? ev : \"\");\n"
+                    "            free(ev);\n"
+                    "        }\n",
+                    i + 1,
+                    field) != 0) return -1;
+        }
+    }
+    if (forge_str_fmt(
+            b,
+            "        len += (size_t)snprintf(json + len, cap - len, \"}\");\n"
+            "        if (len >= cap - 4096) {\n"
+            "            db_statement_finalize(st);\n"
+            "            free(json);\n"
+            "            action_controller_render_text(res, 500, \"Response too large\");\n"
+            "            return;\n"
+            "        }\n"
+            "    }\n"
+            "    db_statement_finalize(st);\n"
+            "    len += (size_t)snprintf(json + len, cap - len, \"]}\");\n"
+            "    action_controller_render_json(res, 200, json);\n"
+            "    action_response_set_content_type(res, \"application/json\");\n"
+            "}\n\n") != 0) {
+        return -1;
+    }
+
+    if (forge_str_fmt(
+            b,
+            "void %s_show(ActionRequest *req, ActionResponse *res) {\n"
+            "    int rid = 0;\n"
+            "    char path_fmt[128];\n"
+            "    char path_fmt_json[128];\n"
+            "    DbConnection *conn;\n"
+            "    DbStatement *st = NULL;\n"
+            "    char *json;\n"
+            "    size_t len = 0;\n"
+            "    size_t cap = 32768;\n"
+            "    const char *sql = \"SELECT id",
+            resource_plural,
+            resource_plural) != 0) {
+        return -1;
+    }
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) return -1;
+        str_to_lower(key, field, sizeof(field));
+        if (forge_str_fmt(b, ", %s", field) != 0) return -1;
+    }
+    if (forge_str_fmt(
+            b,
+            " FROM %s WHERE id = ?\";\n"
+            "    if (!req || !req->path) {\n"
+            "        action_controller_render_text(res, 400, \"Bad request\");\n"
+            "        return;\n"
+            "    }\n"
+            "    (void)snprintf(path_fmt, sizeof(path_fmt), \"/%%s/%%%%d\", \"%s\");\n"
+            "    (void)snprintf(path_fmt_json, sizeof(path_fmt_json), \"/%%s/%%%%d.json\", \"%s\");\n"
+            "    if (sscanf(req->path, path_fmt_json, &rid) != 1 && sscanf(req->path, path_fmt, &rid) != 1) {\n"
+            "        action_controller_render_text(res, 400, \"Bad request\");\n"
+            "        return;\n"
+            "    }\n"
+            "    if (strstr(req->path, \".json\") == NULL) {\n"
+            "        render_view(res, \"%s/show\");\n"
+            "        return;\n"
+            "    }\n"
+            "    conn = cortex_db_connection();\n"
+            "    if (!conn) {\n"
+            "        action_controller_render_text(res, 500, \"Database unavailable\");\n"
+            "        return;\n"
+            "    }\n"
+            "    json = (char *)malloc(cap);\n"
+            "    if (!json) {\n"
+            "        action_controller_render_text(res, 500, \"Out of memory\");\n"
+            "        return;\n"
+            "    }\n"
+            "    if (db_connection_prepare(conn, sql, &st) != 0) {\n"
+            "        free(json);\n"
+            "        action_controller_render_text(res, 500, \"Database query failed\");\n"
+            "        return;\n"
+            "    }\n"
+            "    if (db_statement_bind_int(st, 1, rid) != 0) {\n"
+            "        db_statement_finalize(st);\n"
+            "        free(json);\n"
+            "        action_controller_render_text(res, 500, \"Bind failed\");\n"
+            "        return;\n"
+            "    }\n"
+            "    if (db_statement_step(st) != 1) {\n"
+            "        db_statement_finalize(st);\n"
+            "        free(json);\n"
+            "        action_controller_render_text(res, 404, \"Not found\");\n"
+            "        return;\n"
+            "    }\n"
+            "    len += (size_t)snprintf(json + len, cap - len, \"{\\\"data\\\":{\\\"id\\\":%%d\", db_statement_column_int(st, 0));\n",
+            resource_plural,
+            resource_plural,
+            resource_plural,
+            resource_plural,
+            resource_plural) != 0) {
+        return -1;
+    }
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        char typ[32];
+        int is_bool;
+        int is_int;
+        int is_real;
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) return -1;
+        str_to_lower(key, field, sizeof(field));
+        if (parse_attribute_type(attributes[i], typ, sizeof(typ)) != 0) return -1;
+        is_bool = (strcmp(typ, "boolean") == 0 || strcmp(typ, "bool") == 0);
+        is_int = (strcmp(typ, "integer") == 0 || strcmp(typ, "int") == 0);
+        is_real = (strcmp(typ, "float") == 0 || strcmp(typ, "decimal") == 0 || strcmp(typ, "real") == 0);
+        if (is_bool) {
+            if (forge_str_fmt(
+                    b,
+                    "    len += (size_t)snprintf(json + len, cap - len, \",\\\"%s\\\":%%s\", db_statement_column_int(st, %d) ? \"true\" : \"false\");\n",
+                    field,
+                    i + 1) != 0) return -1;
+        } else if (is_int) {
+            if (forge_str_fmt(
+                    b,
+                    "    len += (size_t)snprintf(json + len, cap - len, \",\\\"%s\\\":%%d\", db_statement_column_int(st, %d));\n",
+                    field,
+                    i + 1) != 0) return -1;
+        } else if (is_real) {
+            if (forge_str_fmt(
+                    b,
+                    "    {\n"
+                    "        char *ev = json_escape(db_statement_column_text(st, %d));\n"
+                    "        len += (size_t)snprintf(json + len, cap - len, \",\\\"%s\\\":%%s\", ev ? ev : \"0\");\n"
+                    "        free(ev);\n"
+                    "    }\n",
+                    i + 1,
+                    field) != 0) return -1;
+        } else {
+            if (forge_str_fmt(
+                    b,
+                    "    {\n"
+                    "        char *ev = json_escape(db_statement_column_text(st, %d));\n"
+                    "        len += (size_t)snprintf(json + len, cap - len, \",\\\"%s\\\":\\\"%%s\\\"\", ev ? ev : \"\");\n"
+                    "        free(ev);\n"
+                    "    }\n",
+                    i + 1,
+                    field) != 0) return -1;
+        }
+    }
+    if (forge_str_fmt(
+            b,
+            "    len += (size_t)snprintf(json + len, cap - len, \"}}\");\n"
+            "    db_statement_finalize(st);\n"
+            "    action_controller_render_json(res, 200, json);\n"
+            "    action_response_set_content_type(res, \"application/json\");\n"
+            "}\n\n",
+            resource_plural) != 0) {
+        return -1;
+    }
+
+    if (forge_str_fmt(
+            b,
+            "void %s_new(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/new\"); }\n"
+            "void %s_edit(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/edit\"); }\n",
+            resource_plural,
+            resource_plural,
+            resource_plural,
+            resource_plural) != 0) {
+        return -1;
+    }
+    if (forge_emit_scaffold_create_update(b, resource_plural, attr_count, attributes) != 0) {
+        return -1;
+    }
+    if (forge_str_fmt(
+            b,
+            "void %s_delete(ActionRequest *req, ActionResponse *res) {\n"
+            "    int rid = 0;\n"
+            "    char path_fmt[128];\n"
+            "    DbConnection *conn;\n"
+            "    DbStatement *st = NULL;\n"
+            "    const char *sql_del = \"DELETE FROM %s WHERE id = ?\";\n"
+            "    (void)snprintf(path_fmt, sizeof(path_fmt), \"/%%s/%%%%d\", \"%s\");\n"
+            "    if (!req || sscanf(req->path, path_fmt, &rid) != 1) {\n"
+            "        action_controller_render_text(res, 400, \"Bad request\");\n"
+            "        return;\n"
+            "    }\n"
+            "    conn = cortex_db_connection();\n"
+            "    if (!conn) {\n"
+            "        action_controller_render_text(res, 500, \"Database unavailable\");\n"
+            "        return;\n"
+            "    }\n"
+            "    if (db_connection_prepare(conn, sql_del, &st) != 0) {\n"
+            "        action_controller_render_text(res, 500, \"Database query failed\");\n"
+            "        return;\n"
+            "    }\n"
+            "    if (db_statement_bind_int(st, 1, rid) != 0) {\n"
+            "        db_statement_finalize(st);\n"
+            "        action_controller_render_text(res, 500, \"Bind failed\");\n"
+            "        return;\n"
+            "    }\n"
+            "    if (db_statement_step(st) != 0) {\n"
+            "        db_statement_finalize(st);\n"
+            "        action_controller_render_text(res, 500, \"Database write failed\");\n"
+            "        return;\n"
+            "    }\n"
+            "    db_statement_finalize(st);\n"
+            "    action_controller_render_text(res, 200, \"deleted\");\n"
+            "}\n",
+            resource_plural,
+            resource_plural,
+            resource_plural) != 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
  static int ensure_dir(const char *path) {
      if (mkdir(path, 0755) == -1) {
          if (errno == EEXIST) {
@@ -966,12 +1341,42 @@ static int parse_attribute_key(const char *attr, char *out, size_t out_size) {
 }
 
 static int ensure_javascript_structure(void) {
+    const char *app_jsx =
+        "import React from \"react\";\n"
+        "import { createRoot } from \"react-dom/client\";\n"
+        "import { componentRegistry } from \"./resources/index.jsx\";\n\n"
+        "function parseProps(node) {\n"
+        "  const raw = node.getAttribute(\"data-react-props\") || \"{}\";\n"
+        "  try { return JSON.parse(raw); } catch (_err) { return {}; }\n"
+        "}\n\n"
+        "function mountReactIslands() {\n"
+        "  const nodes = document.querySelectorAll(\"[data-react-component]\");\n"
+        "  nodes.forEach((node) => {\n"
+        "    const name = node.getAttribute(\"data-react-component\");\n"
+        "    const Component = componentRegistry[name];\n"
+        "    if (!Component) {\n"
+        "      console.warn(`Cortex React: component '${name}' not found`);\n"
+        "      return;\n"
+        "    }\n"
+        "    const props = parseProps(node);\n"
+        "    const root = createRoot(node);\n"
+        "    root.render(React.createElement(Component, props));\n"
+        "  });\n"
+        "}\n\n"
+        "if (document.readyState === \"loading\") {\n"
+        "  document.addEventListener(\"DOMContentLoaded\", mountReactIslands);\n"
+        "} else {\n"
+        "  mountReactIslands();\n"
+        "}\n";
     const char *app_js =
         "import { Application } from \"../../js/runtime/index.js\";\n"
         "import { registerControllers } from \"./controllers/index.js\";\n\n"
         "const application = new Application();\n"
         "registerControllers(application);\n"
         "application.start();\n";
+    const char *resources_index =
+        "/* Auto-generated by Cortex scaffold. */\n"
+        "export const componentRegistry = {};\n";
     const char *controllers_index =
         "/* This file is auto-generated by Cortex CLI (assets:build/dev). */\n"
         "export function registerControllers(_application) {\n"
@@ -999,10 +1404,13 @@ static int ensure_javascript_structure(void) {
     if (ensure_dir("app") != 0) return -1;
     if (ensure_dir("app/javascript") != 0) return -1;
     if (ensure_dir("app/javascript/controllers") != 0) return -1;
+    if (ensure_dir("app/javascript/resources") != 0) return -1;
     if (ensure_dir("js") != 0) return -1;
     if (ensure_dir("js/runtime") != 0) return -1;
+    if (write_template_file("app/javascript/application.jsx", app_jsx) != 0) return -1;
     if (write_template_file("app/javascript/application.js", app_js) != 0) return -1;
     if (write_template_file("app/javascript/controllers/index.js", controllers_index) != 0) return -1;
+    if (write_template_file("app/javascript/resources/index.jsx", resources_index) != 0) return -1;
     if (write_template_file("js/runtime/index.js", runtime_js) != 0) return -1;
     return 0;
 }
@@ -1067,6 +1475,260 @@ static int append_form_field(char *view_buf,
 
     *view_len += appended;
     if (*view_len >= view_buf_size) return -1;
+    return 0;
+}
+
+static int write_scaffold_react_resource_files(const char *resource,
+                                               const char *resource_plural,
+                                               int attr_count,
+                                               const char **attributes) {
+    char resources_dir[256];
+    char resource_dir[256];
+    char resource_file[512];
+    char registry_file[256];
+    ForgeStrBuf js;
+    int i;
+
+    if (!resource || !resource_plural || attr_count < 0) return -1;
+
+    if (snprintf(resources_dir, sizeof(resources_dir), "app/javascript/resources") < 0) return -1;
+    if (snprintf(resource_dir, sizeof(resource_dir), "app/javascript/resources/%s", resource_plural) < 0) return -1;
+    if (snprintf(resource_file, sizeof(resource_file), "%s/index.jsx", resource_dir) < 0) return -1;
+    if (snprintf(registry_file, sizeof(registry_file), "app/javascript/resources/index.jsx") < 0) return -1;
+
+    if (ensure_dir("app") != 0) return -1;
+    if (ensure_dir("app/javascript") != 0) return -1;
+    if (ensure_dir(resources_dir) != 0) return -1;
+    if (ensure_dir(resource_dir) != 0) return -1;
+
+    js.p = NULL;
+    js.len = 0;
+    js.cap = 0;
+
+    if (forge_str_fmt(&js,
+                      "import React, { useEffect, useMemo, useState } from \"react\";\n\n"
+                      "const resource = \"%s\";\n"
+                      "const fields = [\n",
+                      resource_plural) != 0) {
+        forge_str_free(&js);
+        return -1;
+    }
+
+    for (i = 0; i < attr_count; ++i) {
+        char key[64];
+        char field[64];
+        char type[32];
+        if (parse_attribute_key(attributes[i], key, sizeof(key)) != 0) {
+            forge_str_free(&js);
+            return -1;
+        }
+        str_to_lower(key, field, sizeof(field));
+        if (parse_attribute_type(attributes[i], type, sizeof(type)) != 0) {
+            forge_str_free(&js);
+            return -1;
+        }
+        if (forge_str_fmt(&js,
+                          "  { name: \"%s\", label: \"%s\", type: \"%s\" },\n",
+                          field,
+                          key,
+                          type[0] ? type : "string") != 0) {
+            forge_str_free(&js);
+            return -1;
+        }
+    }
+    if (forge_str_fmt(
+            &js,
+            "];\n\n"
+            "function coerceValue(field, raw) {\n"
+            "  if (field.type === \"boolean\" || field.type === \"bool\") return !!raw;\n"
+            "  return raw == null ? \"\" : String(raw);\n"
+            "}\n\n"
+            "function defaultFormState() {\n"
+            "  const next = {};\n"
+            "  fields.forEach((field) => {\n"
+            "    next[field.name] = field.type === \"boolean\" || field.type === \"bool\" ? false : \"\";\n"
+            "  });\n"
+            "  return next;\n"
+            "}\n\n"
+            "export function %sIndexPage(props) {\n"
+            "  const [rows, setRows] = useState([]);\n"
+            "  const [loading, setLoading] = useState(true);\n"
+            "  const endpoint = props.indexJsonPath || `/${resource}.json`;\n"
+            "  const deleteRecord = (id) => {\n"
+            "    if (!window.confirm(\"Delete this record?\")) return;\n"
+            "    fetch(`/${resource}/${id}`, {\n"
+            "      method: \"POST\",\n"
+            "      headers: { \"Content-Type\": \"application/x-www-form-urlencoded\" },\n"
+            "      body: \"_method=DELETE\",\n"
+            "    }).then((res) => {\n"
+            "      if (res.ok) {\n"
+            "        setRows((prev) => prev.filter((row) => String(row.id) !== String(id)));\n"
+            "      }\n"
+            "    });\n"
+            "  };\n"
+            "  useEffect(() => {\n"
+            "    let active = true;\n"
+            "    fetch(endpoint)\n"
+            "      .then((res) => res.json())\n"
+            "      .then((json) => { if (active) setRows(Array.isArray(json.data) ? json.data : []); })\n"
+            "      .catch(() => { if (active) setRows([]); })\n"
+            "      .finally(() => { if (active) setLoading(false); });\n"
+            "    return () => { active = false; };\n"
+            "  }, [endpoint]);\n"
+            "  if (loading) return React.createElement(\"p\", null, \"Loading...\");\n"
+            "  return React.createElement(\"div\", null,\n"
+            "    React.createElement(\"h1\", null, props.title || \"%s\"),\n"
+            "    React.createElement(\"p\", null, React.createElement(\"a\", { href: props.newPath || `/${resource}/new` }, \"New %s\")),\n"
+            "    React.createElement(\"table\", { border: \"1\", cellPadding: \"6\", cellSpacing: \"0\" },\n"
+            "      React.createElement(\"thead\", null,\n"
+            "        React.createElement(\"tr\", null,\n"
+            "          React.createElement(\"th\", null, \"id\"),\n"
+            "          ...fields.map((field) => React.createElement(\"th\", { key: field.name }, field.label)),\n"
+            "          React.createElement(\"th\", null, \"Actions\")\n"
+            "        )\n"
+            "      ),\n"
+            "      React.createElement(\"tbody\", null,\n"
+            "        rows.length === 0\n"
+            "          ? React.createElement(\"tr\", null, React.createElement(\"td\", { colSpan: String(fields.length + 2) }, \"No records yet.\"))\n"
+            "          : rows.map((row) => React.createElement(\"tr\", { key: row.id },\n"
+            "              React.createElement(\"td\", null, React.createElement(\"a\", { href: `/${resource}/${row.id}` }, row.id)),\n"
+            "              ...fields.map((field) => React.createElement(\"td\", { key: field.name }, String(row[field.name] ?? \"\"))),\n"
+            "              React.createElement(\"td\", null,\n"
+            "                React.createElement(\"a\", { href: `/${resource}/${row.id}` }, \"Show\"),\n"
+            "                \" | \",\n"
+            "                React.createElement(\"a\", { href: `/${resource}/${row.id}/edit` }, \"Edit\"),\n"
+            "                \" | \",\n"
+            "                React.createElement(\"button\", { type: \"button\", onClick: () => deleteRecord(row.id) }, \"Delete\")\n"
+            "              )\n"
+            "            ))\n"
+            "      )\n"
+            "    )\n"
+            "  );\n"
+            "}\n\n"
+            "export function %sShowPage(props) {\n"
+            "  const [row, setRow] = useState(null);\n"
+            "  const endpoint = useMemo(() => {\n"
+            "    const p = window.location.pathname.replace(/\\/$/, \"\");\n"
+            "    return p.endsWith(\".json\") ? p : `${p}.json`;\n"
+            "  }, []);\n"
+            "  const deleteCurrent = () => {\n"
+            "    if (!row || !window.confirm(\"Delete this record?\")) return;\n"
+            "    fetch(`/${resource}/${row.id}`, {\n"
+            "      method: \"POST\",\n"
+            "      headers: { \"Content-Type\": \"application/x-www-form-urlencoded\" },\n"
+            "      body: \"_method=DELETE\",\n"
+            "    }).then((res) => {\n"
+            "      if (res.ok) window.location.assign(`/${resource}`);\n"
+            "    });\n"
+            "  };\n"
+            "  useEffect(() => {\n"
+            "    let active = true;\n"
+            "    fetch(endpoint)\n"
+            "      .then((res) => res.json())\n"
+            "      .then((json) => { if (active) setRow(json.data || null); })\n"
+            "      .catch(() => { if (active) setRow(null); });\n"
+            "    return () => { active = false; };\n"
+            "  }, [endpoint]);\n"
+            "  if (!row) return React.createElement(\"p\", null, \"Record not found.\");\n"
+            "  return React.createElement(\"div\", null,\n"
+            "    React.createElement(\"h1\", null, props.title || \"%s\"),\n"
+            "    React.createElement(\"dl\", null,\n"
+            "      React.createElement(\"dt\", null, \"id\"),\n"
+            "      React.createElement(\"dd\", null, String(row.id)),\n"
+            "      ...fields.flatMap((field) => [\n"
+            "        React.createElement(\"dt\", { key: `${field.name}-dt` }, field.label),\n"
+            "        React.createElement(\"dd\", { key: `${field.name}-dd` }, String(row[field.name] ?? \"\"))\n"
+            "      ])\n"
+            "    ),\n"
+            "    React.createElement(\"p\", null,\n"
+            "      React.createElement(\"a\", { href: `/${resource}/${row.id}/edit` }, \"Edit\"),\n"
+            "      \" | \",\n"
+            "      React.createElement(\"button\", { type: \"button\", onClick: deleteCurrent }, \"Delete\")\n"
+            "    ),\n"
+            "    React.createElement(\"p\", null, React.createElement(\"a\", { href: `/${resource}` }, \"Back to list\"))\n"
+            "  );\n"
+            "}\n\n"
+            "export function %sFormPage(props) {\n"
+            "  const [values, setValues] = useState(defaultFormState());\n"
+            "  const isEdit = props.mode === \"edit\";\n"
+            "  const path = window.location.pathname.replace(/\\/$/, \"\");\n"
+            "  const match = path.match(new RegExp(`/${resource}/(\\\\d+)(/edit)?$`));\n"
+            "  const recordId = match ? match[1] : null;\n"
+            "  const action = isEdit && recordId ? `/${resource}/${recordId}` : `/${resource}`;\n"
+            "  useEffect(() => {\n"
+            "    if (!isEdit || !recordId) return;\n"
+            "    fetch(`/${resource}/${recordId}.json`)\n"
+            "      .then((res) => res.json())\n"
+            "      .then((json) => {\n"
+            "        const row = json.data || {};\n"
+            "        const next = defaultFormState();\n"
+            "        fields.forEach((field) => { next[field.name] = coerceValue(field, row[field.name]); });\n"
+            "        setValues(next);\n"
+            "      })\n"
+            "      .catch(() => {});\n"
+            "  }, [isEdit, recordId]);\n"
+            "  const setField = (name, value) => setValues((prev) => ({ ...prev, [name]: value }));\n"
+            "  return React.createElement(\"div\", null,\n"
+            "    React.createElement(\"h1\", null, props.title || (isEdit ? \"Edit\" : \"New\")),\n"
+            "    React.createElement(\"form\", { method: \"POST\", action },\n"
+            "      isEdit ? React.createElement(\"input\", { type: \"hidden\", name: \"_method\", value: \"PUT\" }) : null,\n"
+            "      ...fields.map((field) => React.createElement(\"div\", { key: field.name },\n"
+            "        React.createElement(\"label\", { htmlFor: field.name }, field.label),\n"
+            "        field.type === \"text\"\n"
+            "          ? React.createElement(\"textarea\", { id: field.name, name: field.name, value: values[field.name], onChange: (e) => setField(field.name, e.target.value) })\n"
+            "          : field.type === \"boolean\" || field.type === \"bool\"\n"
+            "          ? React.createElement(\"input\", { type: \"checkbox\", id: field.name, name: field.name, checked: !!values[field.name], onChange: (e) => setField(field.name, e.target.checked) })\n"
+            "          : React.createElement(\"input\", { type: field.type === \"email\" ? \"email\" : \"text\", id: field.name, name: field.name, value: values[field.name], onChange: (e) => setField(field.name, e.target.value) })\n"
+            "      )),\n"
+            "      React.createElement(\"button\", { type: \"submit\" }, isEdit ? \"Update\" : \"Create\")\n"
+            "    )\n"
+            "  );\n"
+            "}\n\n"
+            "export default {\n"
+            "  %sIndexPage,\n"
+            "  %sShowPage,\n"
+            "  %sFormPage,\n"
+            "};\n",
+            resource_plural,
+            resource_plural,
+            resource,
+            resource_plural,
+            resource_plural,
+            resource_plural,
+            resource_plural,
+            resource_plural,
+            resource_plural,
+            resource_plural) != 0) {
+        forge_str_free(&js);
+        return -1;
+    }
+
+    if (!js.p || write_template_file(resource_file, js.p) != 0) {
+        forge_str_free(&js);
+        return -1;
+    }
+    forge_str_free(&js);
+
+    {
+        char registry_buf[2048];
+        if (snprintf(registry_buf, sizeof(registry_buf),
+                     "import pages from \"./%s/index.jsx\";\n\n"
+                     "export const componentRegistry = {\n"
+                     "  %sIndexPage: pages.%sIndexPage,\n"
+                     "  %sShowPage: pages.%sShowPage,\n"
+                     "  %sFormPage: pages.%sFormPage,\n"
+                     "};\n",
+                     resource_plural,
+                     resource_plural,
+                     resource_plural,
+                     resource_plural,
+                     resource_plural,
+                     resource_plural,
+                     resource_plural) < 0) {
+            return -1;
+        }
+        if (write_template_file(registry_file, registry_buf) != 0) return -1;
+    }
     return 0;
 }
 
@@ -1229,7 +1891,7 @@ static int write_scaffold_neural_template(const char *resource, const char *reso
 }
 
 /* Generate <resource> scaffold with model/controller/views/routes files. */
-int forge_generate_scaffold(const char *resource_name, int attr_count, const char **attributes) {
+int forge_generate_scaffold(const char *resource_name, int attr_count, const char **attributes, int use_react) {
     char resource[64];
     char resource_plural[64];
     char type_name[64];
@@ -1313,7 +1975,9 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
     scaffold_controller_buf.p = NULL;
     scaffold_controller_buf.len = 0;
     scaffold_controller_buf.cap = 0;
-    if (forge_emit_scaffold_controller(&scaffold_controller_buf, resource, resource_plural, type_name, attr_count, attributes) != 0) {
+    if ((use_react
+             ? forge_emit_scaffold_controller_react(&scaffold_controller_buf, resource_plural, attr_count, attributes)
+             : forge_emit_scaffold_controller(&scaffold_controller_buf, resource, resource_plural, type_name, attr_count, attributes)) != 0) {
         forge_str_free(&scaffold_controller_buf);
         return -1;
     }
@@ -1329,66 +1993,140 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
     {
         char view_buf[4096];
         size_t view_len = 0;
-        if (snprintf(path, sizeof(path), "%s/index.html", views_dir) < 0) return -1;
-        if (write_template_file(path,
-                                "<!-- Listing HTML is built in app/controllers/ — see *_index() (SQLite). -->\n") != 0) {
-            perror("forge_scaffold index");
-            return -1;
-        }
+        if (use_react) {
+            if (snprintf(path, sizeof(path), "%s/index.html", views_dir) < 0) return -1;
+            if (snprintf(view_buf, sizeof(view_buf),
+                         "<div data-react-component=\"%sIndexPage\" data-react-props='{\"title\":\"%s\",\"newPath\":\"/%s/new\",\"indexJsonPath\":\"/%s.json\"}'>\n"
+                         "  <h1>%s</h1>\n"
+                         "  <p><a href=\"/%s/new\">New %s</a></p>\n"
+                         "  <p>Loading...</p>\n"
+                         "</div>\n",
+                         resource_plural, type_name, resource_plural, resource_plural,
+                         type_name, resource_plural, type_name) < 0) return -1;
+            if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold react index"); return -1; }
 
-        if (snprintf(path, sizeof(path), "%s/show.html", views_dir) < 0) return -1;
-        if (write_template_file(path,
-                                "<!-- Show HTML is built in app/controllers/ — see *_show() (SQLite). -->\n") != 0) {
-            perror("forge_scaffold show");
-            return -1;
-        }
+            if (snprintf(path, sizeof(path), "%s/show.html", views_dir) < 0) return -1;
+            if (snprintf(view_buf, sizeof(view_buf),
+                         "<div data-react-component=\"%sShowPage\" data-react-props='{\"title\":\"%s\"}'>\n"
+                         "  <h1>%s</h1>\n"
+                         "  <p>Loading...</p>\n"
+                         "  <p><a href=\"/%s\">Back to list</a></p>\n"
+                         "</div>\n",
+                         resource_plural, type_name, type_name, resource_plural) < 0) return -1;
+            if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold react show"); return -1; }
 
-        if (snprintf(path, sizeof(path), "%s/new.html", views_dir) < 0) return -1;
-        view_len = (size_t)snprintf(view_buf, sizeof(view_buf),
-                                    "<h1>New %s</h1>\n"
-                                    "<form method=\"POST\" action=\"/%s\" data-controller=\"%s\" data-%s-target=\"form\" data-action=\"submit->%s#submit\">\n",
-                                    resource, resource_plural, resource, resource, resource);
-        if (view_len >= sizeof(view_buf)) return -1;
-        for (i = 0; i < attr_count; ++i) {
-            const char *attr = attributes[i];
-            char key[64];
-            char field[64];
-            char type[32];
-            if (!attr) return -1;
-            if (parse_attribute_key(attr, key, sizeof(key)) != 0) return -1;
-            str_to_lower(key, field, sizeof(field));
-            if (parse_attribute_type(attr, type, sizeof(type)) != 0) return -1;
-            if (append_form_field(view_buf, sizeof(view_buf), &view_len, key, field, type) != 0) return -1;
-        }
-        view_len += (size_t)snprintf(view_buf + view_len, sizeof(view_buf) - view_len,
-                                     "  <button type=\"submit\">Create</button>\n"
-                                     "</form>\n");
-        if (view_len >= sizeof(view_buf)) return -1;
-        if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold new"); return -1; }
+            if (snprintf(path, sizeof(path), "%s/new.html", views_dir) < 0) return -1;
+            view_len = (size_t)snprintf(view_buf, sizeof(view_buf),
+                                        "<div data-react-component=\"%sFormPage\" data-react-props='{\"title\":\"New %s\",\"mode\":\"new\"}'>\n"
+                                        "<h1>New %s</h1>\n"
+                                        "<form method=\"POST\" action=\"/%s\">\n",
+                                        resource_plural, type_name, type_name, resource_plural);
+            if (view_len >= sizeof(view_buf)) return -1;
+            for (i = 0; i < attr_count; ++i) {
+                const char *attr = attributes[i];
+                char key[64];
+                char field[64];
+                char type[32];
+                if (!attr) return -1;
+                if (parse_attribute_key(attr, key, sizeof(key)) != 0) return -1;
+                str_to_lower(key, field, sizeof(field));
+                if (parse_attribute_type(attr, type, sizeof(type)) != 0) return -1;
+                if (append_form_field(view_buf, sizeof(view_buf), &view_len, key, field, type) != 0) return -1;
+            }
+            view_len += (size_t)snprintf(view_buf + view_len, sizeof(view_buf) - view_len,
+                                         "  <button type=\"submit\">Create</button>\n"
+                                         "</form>\n"
+                                         "</div>\n");
+            if (view_len >= sizeof(view_buf)) return -1;
+            if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold react new"); return -1; }
 
-        if (snprintf(path, sizeof(path), "%s/edit.html", views_dir) < 0) return -1;
-        view_len = (size_t)snprintf(view_buf, sizeof(view_buf),
-                                    "<h1>Edit %s</h1>\n"
-                                    "<form method=\"POST\" action=\"/%s/1\" data-controller=\"%s\" data-%s-target=\"form\" data-action=\"submit->%s#submit\">\n",
-                                    resource, resource_plural, resource, resource, resource);
-        if (view_len >= sizeof(view_buf)) return -1;
-        for (i = 0; i < attr_count; ++i) {
-            const char *attr = attributes[i];
-            char key[64];
-            char field[64];
-            char type[32];
-            if (!attr) return -1;
-            if (parse_attribute_key(attr, key, sizeof(key)) != 0) return -1;
-            str_to_lower(key, field, sizeof(field));
-            if (parse_attribute_type(attr, type, sizeof(type)) != 0) return -1;
-            if (append_form_field(view_buf, sizeof(view_buf), &view_len, key, field, type) != 0) return -1;
+            if (snprintf(path, sizeof(path), "%s/edit.html", views_dir) < 0) return -1;
+            view_len = (size_t)snprintf(view_buf, sizeof(view_buf),
+                                        "<div data-react-component=\"%sFormPage\" data-react-props='{\"title\":\"Edit %s\",\"mode\":\"edit\"}'>\n"
+                                        "<h1>Edit %s</h1>\n"
+                                        "<form method=\"POST\" action=\"/%s/1\">\n",
+                                        resource_plural, type_name, type_name, resource_plural);
+            if (view_len >= sizeof(view_buf)) return -1;
+            for (i = 0; i < attr_count; ++i) {
+                const char *attr = attributes[i];
+                char key[64];
+                char field[64];
+                char type[32];
+                if (!attr) return -1;
+                if (parse_attribute_key(attr, key, sizeof(key)) != 0) return -1;
+                str_to_lower(key, field, sizeof(field));
+                if (parse_attribute_type(attr, type, sizeof(type)) != 0) return -1;
+                if (append_form_field(view_buf, sizeof(view_buf), &view_len, key, field, type) != 0) return -1;
+            }
+            view_len += (size_t)snprintf(view_buf + view_len, sizeof(view_buf) - view_len,
+                                         "  <input type=\"hidden\" name=\"_method\" value=\"PUT\" />\n"
+                                         "  <button type=\"submit\">Update</button>\n"
+                                         "</form>\n"
+                                         "</div>\n");
+            if (view_len >= sizeof(view_buf)) return -1;
+            if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold react edit"); return -1; }
+        } else {
+            if (snprintf(path, sizeof(path), "%s/index.html", views_dir) < 0) return -1;
+            if (write_template_file(path,
+                                    "<!-- Listing HTML is built in app/controllers/ — see *_index() (SQLite). -->\n") != 0) {
+                perror("forge_scaffold index");
+                return -1;
+            }
+
+            if (snprintf(path, sizeof(path), "%s/show.html", views_dir) < 0) return -1;
+            if (write_template_file(path,
+                                    "<!-- Show HTML is built in app/controllers/ — see *_show() (SQLite). -->\n") != 0) {
+                perror("forge_scaffold show");
+                return -1;
+            }
+
+            if (snprintf(path, sizeof(path), "%s/new.html", views_dir) < 0) return -1;
+            view_len = (size_t)snprintf(view_buf, sizeof(view_buf),
+                                        "<h1>New %s</h1>\n"
+                                        "<form method=\"POST\" action=\"/%s\" data-controller=\"%s\" data-%s-target=\"form\" data-action=\"submit->%s#submit\">\n",
+                                        resource, resource_plural, resource, resource, resource);
+            if (view_len >= sizeof(view_buf)) return -1;
+            for (i = 0; i < attr_count; ++i) {
+                const char *attr = attributes[i];
+                char key[64];
+                char field[64];
+                char type[32];
+                if (!attr) return -1;
+                if (parse_attribute_key(attr, key, sizeof(key)) != 0) return -1;
+                str_to_lower(key, field, sizeof(field));
+                if (parse_attribute_type(attr, type, sizeof(type)) != 0) return -1;
+                if (append_form_field(view_buf, sizeof(view_buf), &view_len, key, field, type) != 0) return -1;
+            }
+            view_len += (size_t)snprintf(view_buf + view_len, sizeof(view_buf) - view_len,
+                                         "  <button type=\"submit\">Create</button>\n"
+                                         "</form>\n");
+            if (view_len >= sizeof(view_buf)) return -1;
+            if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold new"); return -1; }
+
+            if (snprintf(path, sizeof(path), "%s/edit.html", views_dir) < 0) return -1;
+            view_len = (size_t)snprintf(view_buf, sizeof(view_buf),
+                                        "<h1>Edit %s</h1>\n"
+                                        "<form method=\"POST\" action=\"/%s/1\" data-controller=\"%s\" data-%s-target=\"form\" data-action=\"submit->%s#submit\">\n",
+                                        resource, resource_plural, resource, resource, resource);
+            if (view_len >= sizeof(view_buf)) return -1;
+            for (i = 0; i < attr_count; ++i) {
+                const char *attr = attributes[i];
+                char key[64];
+                char field[64];
+                char type[32];
+                if (!attr) return -1;
+                if (parse_attribute_key(attr, key, sizeof(key)) != 0) return -1;
+                str_to_lower(key, field, sizeof(field));
+                if (parse_attribute_type(attr, type, sizeof(type)) != 0) return -1;
+                if (append_form_field(view_buf, sizeof(view_buf), &view_len, key, field, type) != 0) return -1;
+            }
+            view_len += (size_t)snprintf(view_buf + view_len, sizeof(view_buf) - view_len,
+                                         "  <input type=\"hidden\" name=\"_method\" value=\"PUT\" />\n"
+                                         "  <button type=\"submit\">Update</button>\n"
+                                         "</form>\n");
+            if (view_len >= sizeof(view_buf)) return -1;
+            if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold edit"); return -1; }
         }
-        view_len += (size_t)snprintf(view_buf + view_len, sizeof(view_buf) - view_len,
-                                     "  <input type=\"hidden\" name=\"_method\" value=\"PUT\" />\n"
-                                     "  <button type=\"submit\">Update</button>\n"
-                                     "</form>\n");
-        if (view_len >= sizeof(view_buf)) return -1;
-        if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold edit"); return -1; }
     }
 
     /* routes */
@@ -1409,9 +2147,11 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
                  "    if (!router) return;\n"
                  "    route_get(router, \"/\", home_index);\n"
                  "    route_get(router, \"/%s\", %s_index);\n"
+                 "    route_get(router, \"/%s.json\", %s_index);\n"
                  "    route_get(router, \"/%s/new\", %s_new);\n"
                  "    route_get(router, \"/%s/:id/edit\", %s_edit);\n"
                  "    route_get(router, \"/%s/:id\", %s_show);\n"
+                 "    route_get(router, \"/%s/:id.json\", %s_show);\n"
                  "    route_post(router, \"/%s\", %s_create);\n"
                  "    route_post(router, \"/%s/:id\", %s_update);\n"
                  "    route_put(router, \"/%s/:id\", %s_update);\n"
@@ -1425,16 +2165,23 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
                  resource_plural, resource_plural,
                  resource_plural, resource_plural,
                  resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
                  resource_plural, resource_plural) < 0) return -1;
     printf("forge_scaffold: updating routes in '%s'\n", path);
     if (write_template_file(path, routes_buf) != 0) { perror("forge_scaffold routes"); return -1; }
 
-    if (forge_generate_stimulus_controller(resource) != 0) return -1;
+    if (use_react) {
+        if (write_scaffold_react_resource_files(resource, resource_plural, attr_count, attributes) != 0) return -1;
+    } else {
+        if (forge_generate_stimulus_controller(resource) != 0) return -1;
+    }
     return 0;
 }
 
 int forge_new_project(const char *project_name) {
     char path[320];
+    char package_json_content[2048];
     const char *main_content =
         "/* Cortex app server entrypoint */\n"
         "#include <stdio.h>\n"
@@ -1469,12 +2216,12 @@ int forge_new_project(const char *project_name) {
         "\t$(CC) $(CFLAGS) $(APP_SRCS) -L$(CORTEX_ROOT) -lcortex -lm -o cortex_app\n\n"
         ".PHONY: all clean server dev assets-build\n"
         "all: cortex_app\n"
-        "server: cortex_app\n"
+        "server: cortex_app assets-build\n"
         "\t./cortex_app\n"
         "assets-build:\n"
-        "\t./$(CORTEX_ROOT)/cortex assets:build\n"
+        "\t$(CORTEX_ROOT)/cortex assets:build\n"
         "dev:\n"
-        "\t./$(CORTEX_ROOT)/cortex dev\n"
+        "\t$(CORTEX_ROOT)/cortex dev\n"
         "clean:\n"
         "\trm -f cortex_app\n";
     const char *routes_content =
@@ -1639,6 +2386,26 @@ int forge_new_project(const char *project_name) {
     if (!project_name || project_name[0] == '\0') {
         return -1;
     }
+    if (snprintf(package_json_content, sizeof(package_json_content),
+                 "{\n"
+                 "  \"name\": \"%s\",\n"
+                 "  \"private\": true,\n"
+                 "  \"type\": \"module\",\n"
+                 "  \"scripts\": {\n"
+                 "    \"build\": \"cortex assets:build\",\n"
+                 "    \"dev\": \"cortex dev\"\n"
+                 "  },\n"
+                 "  \"dependencies\": {\n"
+                 "    \"react\": \"latest\",\n"
+                 "    \"react-dom\": \"latest\"\n"
+                 "  },\n"
+                 "  \"devDependencies\": {\n"
+                 "    \"esbuild\": \"latest\"\n"
+                 "  }\n"
+                 "}\n",
+                 project_name) < 0) {
+        return -1;
+    }
     if (snprintf(path, sizeof(path), "%s", project_name) < 0) {
         return -1;
     }
@@ -1717,6 +2484,12 @@ int forge_new_project(const char *project_name) {
     if (ensure_dir(path) != 0) {
         return -1;
     }
+    if (snprintf(path, sizeof(path), "%s/app/javascript/resources", project_name) < 0) {
+        return -1;
+    }
+    if (ensure_dir(path) != 0) {
+        return -1;
+    }
     if (snprintf(path, sizeof(path), "%s/public", project_name) < 0) {
         return -1;
     }
@@ -1786,6 +2559,12 @@ int forge_new_project(const char *project_name) {
     if (write_template_file(path, project_marker_content) != 0) {
         return -1;
     }
+    if (snprintf(path, sizeof(path), "%s/package.json", project_name) < 0) {
+        return -1;
+    }
+    if (write_template_file(path, package_json_content) != 0) {
+        return -1;
+    }
     if (snprintf(path, sizeof(path), "%s/app/javascript/application.js", project_name) < 0) {
         return -1;
     }
@@ -1797,6 +2576,34 @@ int forge_new_project(const char *project_name) {
         "application.start();\n") != 0) {
         return -1;
     }
+    if (snprintf(path, sizeof(path), "%s/app/javascript/application.jsx", project_name) < 0) {
+        return -1;
+    }
+    if (write_template_file(path,
+        "import React from \"react\";\n"
+        "import { createRoot } from \"react-dom/client\";\n"
+        "import { componentRegistry } from \"./resources/index.jsx\";\n\n"
+        "function parseProps(node) {\n"
+        "  const raw = node.getAttribute(\"data-react-props\") || \"{}\";\n"
+        "  try { return JSON.parse(raw); } catch (_err) { return {}; }\n"
+        "}\n\n"
+        "function mountReactIslands() {\n"
+        "  const nodes = document.querySelectorAll(\"[data-react-component]\");\n"
+        "  nodes.forEach((node) => {\n"
+        "    const name = node.getAttribute(\"data-react-component\");\n"
+        "    const Component = componentRegistry[name];\n"
+        "    if (!Component) return;\n"
+        "    const root = createRoot(node);\n"
+        "    root.render(React.createElement(Component, parseProps(node)));\n"
+        "  });\n"
+        "}\n\n"
+        "if (document.readyState === \"loading\") {\n"
+        "  document.addEventListener(\"DOMContentLoaded\", mountReactIslands);\n"
+        "} else {\n"
+        "  mountReactIslands();\n"
+        "}\n") != 0) {
+        return -1;
+    }
     if (snprintf(path, sizeof(path), "%s/app/javascript/controllers/index.js", project_name) < 0) {
         return -1;
     }
@@ -1805,6 +2612,14 @@ int forge_new_project(const char *project_name) {
         "export function registerControllers(_application) {\n"
         "  /* Controllers are registered automatically during JS build. */\n"
         "}\n") != 0) {
+        return -1;
+    }
+    if (snprintf(path, sizeof(path), "%s/app/javascript/resources/index.jsx", project_name) < 0) {
+        return -1;
+    }
+    if (write_template_file(path,
+        "/* Auto-generated by Cortex scaffold. */\n"
+        "export const componentRegistry = {};\n") != 0) {
         return -1;
     }
     if (snprintf(path, sizeof(path), "%s/js/runtime/index.js", project_name) < 0) {

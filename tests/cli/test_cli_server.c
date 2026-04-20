@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -18,6 +19,7 @@
 static int http_get_health(char *out, size_t out_size, int port, int timeout_ms) {
     int sockfd;
     struct sockaddr_in addr;
+    struct timeval tv;
     int attempt_ms;
     int connected = 0;
     const char *req = "GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
@@ -53,6 +55,10 @@ static int http_get_health(char *out, size_t out_size, int port, int timeout_ms)
         close(sockfd);
         return -1;
     }
+
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    (void)setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     if (send(sockfd, req, strlen(req), 0) < 0) {
         close(sockfd);

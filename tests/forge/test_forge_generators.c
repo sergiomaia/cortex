@@ -71,6 +71,16 @@
          return 0;
      }
 
+    for (i = 0; i < g.gl_pathc; ++i) {
+        if (file_contains(g.gl_pathv[i], needle)) {
+            globfree(&g);
+            return 1;
+        }
+    }
+    globfree(&g);
+    return 0;
+}
+
 static char *read_file_alloc(const char *path) {
     FILE *f;
     long sz;
@@ -121,15 +131,6 @@ static int write_file_from_string(const char *path, const char *content) {
     if (nwritten != len) return -1;
     return 0;
 }
-     for (i = 0; i < g.gl_pathc; ++i) {
-         if (file_contains(g.gl_pathv[i], needle)) {
-             globfree(&g);
-             return 1;
-         }
-     }
-     globfree(&g);
-     return 0;
- }
  
  void test_forge_generate_controller_creates_file(void) {
      const char *name = "incident";
@@ -208,7 +209,9 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     const char *view_new_path = "app/views/posts/new.html";
     const char *view_edit_path = "app/views/posts/edit.html";
     const char *layout_path = "app/views/layouts/application.html";
-    const char *stimulus_controller_path = "app/javascript/controllers/post_controller.js";
+    const char *react_entry_path = "app/javascript/application.jsx";
+    const char *react_registry_path = "app/javascript/resources/index.jsx";
+    const char *react_resource_path = "app/javascript/resources/posts/index.jsx";
     int had_routes_file = file_exists(routes_path);
     char *routes_backup = NULL;
 
@@ -229,9 +232,11 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     remove_if_exists(view_edit_path);
     remove_if_exists(layout_path);
     remove_glob_matches("db/migrate/*.sql");
-    remove_if_exists(stimulus_controller_path);
+    remove_if_exists(react_entry_path);
+    remove_if_exists(react_registry_path);
+    remove_if_exists(react_resource_path);
 
-    ASSERT_EQ(forge_generate_scaffold("Post", attr_count, attrs), 0);
+    ASSERT_EQ(forge_generate_scaffold("Post", attr_count, attrs, 1), 0);
 
     ASSERT_TRUE(file_exists(model_path));
     ASSERT_TRUE(file_exists(neural_path));
@@ -242,18 +247,26 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_exists(view_new_path));
     ASSERT_TRUE(file_exists(view_edit_path));
     ASSERT_TRUE(file_exists(layout_path));
-    ASSERT_TRUE(file_exists(stimulus_controller_path));
+    ASSERT_TRUE(file_exists(react_entry_path));
+    ASSERT_TRUE(file_exists(react_registry_path));
+    ASSERT_TRUE(file_exists(react_resource_path));
 
     ASSERT_TRUE(file_contains(layout_path, "{{yield}}"));
     ASSERT_TRUE(any_migration_file_contains("CREATE TABLE posts"));
     ASSERT_TRUE(any_migration_file_contains("created_at"));
-    ASSERT_TRUE(file_contains(view_index_path, "SQLite"));
-    ASSERT_TRUE(file_contains(view_show_path, "SQLite"));
-    ASSERT_TRUE(file_contains(controller_path, "FROM posts"));
+    ASSERT_TRUE(file_contains(view_index_path, "data-react-component=\"postsIndexPage\""));
+    ASSERT_TRUE(file_contains(view_index_path, "<a href=\"/posts/new\">New Post</a>"));
+    ASSERT_TRUE(file_contains(view_show_path, "data-react-component=\"postsShowPage\""));
+    ASSERT_TRUE(file_contains(view_new_path, "data-react-component=\"postsFormPage\""));
+    ASSERT_TRUE(file_contains(view_new_path, "<form method=\"POST\" action=\"/posts\">"));
+    ASSERT_TRUE(file_contains(view_edit_path, "data-react-component=\"postsFormPage\""));
+    ASSERT_TRUE(file_contains(view_edit_path, "<form method=\"POST\" action=\"/posts/1\">"));
+    ASSERT_TRUE(file_contains(controller_path, "render_view(res, \"posts/index\")"));
+    ASSERT_TRUE(file_contains(controller_path, "render_view(res, \"posts/show\")"));
+    ASSERT_TRUE(file_contains(controller_path, "FROM posts ORDER BY id ASC"));
+    ASSERT_TRUE(file_contains(controller_path, "action_response_set_content_type(res, \"application/json\")"));
     ASSERT_TRUE(file_contains(controller_path, "INSERT INTO posts"));
     ASSERT_TRUE(file_contains(controller_path, "UPDATE posts SET"));
-    ASSERT_TRUE(file_contains(controller_path, "render_html"));
-    ASSERT_TRUE(file_contains(controller_path, "action_view_escape_html"));
 
     /* Fields should be parsed into active_model_set_field calls. */
     ASSERT_TRUE(file_contains(model_path, "post_set_title"));
@@ -279,23 +292,15 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_contains(routes_path, "route_put(router, \"/posts/:id\", posts_update)"));
 
     /* new/edit views should include scaffold form fields from attributes. */
-    ASSERT_TRUE(file_contains(view_new_path, "<form method=\"POST\" action=\"/posts\""));
-    ASSERT_TRUE(file_contains(view_new_path, "data-controller=\"post\""));
-    ASSERT_TRUE(file_contains(view_new_path, "data-action=\"submit->post#submit\""));
-    ASSERT_TRUE(file_contains(view_new_path, "<label for=\"title\">title</label>"));
-    ASSERT_TRUE(file_contains(view_new_path, "<input type=\"text\" id=\"title\" name=\"title\" />"));
-    ASSERT_TRUE(file_contains(view_new_path, "<input type=\"email\" id=\"email\" name=\"email\" />"));
-    ASSERT_TRUE(file_contains(view_new_path, "<label for=\"body\">body</label>"));
-    ASSERT_TRUE(file_contains(view_new_path, "<textarea id=\"body\" name=\"body\"></textarea>"));
-    ASSERT_TRUE(file_contains(view_new_path, "<label for=\"published\">published</label>"));
-    ASSERT_TRUE(file_contains(view_new_path, "<input type=\"checkbox\" id=\"published\" name=\"published\" />"));
-    ASSERT_TRUE(file_contains(view_edit_path, "<form method=\"POST\" action=\"/posts/1\""));
-    ASSERT_TRUE(file_contains(view_edit_path, "data-controller=\"post\""));
-    ASSERT_TRUE(file_contains(view_edit_path, "<input type=\"hidden\" name=\"_method\" value=\"PUT\" />"));
-    ASSERT_TRUE(file_contains(view_edit_path, "<input type=\"text\" id=\"title\" name=\"title\" />"));
-    ASSERT_TRUE(file_contains(view_edit_path, "<input type=\"email\" id=\"email\" name=\"email\" />"));
-    ASSERT_TRUE(file_contains(view_edit_path, "<textarea id=\"body\" name=\"body\"></textarea>"));
-    ASSERT_TRUE(file_contains(view_edit_path, "<input type=\"checkbox\" id=\"published\" name=\"published\" />"));
+    ASSERT_TRUE(file_contains(routes_path, "route_get(router, \"/posts.json\", posts_index)"));
+    ASSERT_TRUE(file_contains(routes_path, "route_get(router, \"/posts/:id.json\", posts_show)"));
+    ASSERT_TRUE(file_contains(react_resource_path, "export function postsIndexPage"));
+    ASSERT_TRUE(file_contains(react_resource_path, "export function postsShowPage"));
+    ASSERT_TRUE(file_contains(react_resource_path, "export function postsFormPage"));
+    ASSERT_TRUE(file_contains(react_resource_path, "href: `/${resource}/${row.id}/edit`"));
+    ASSERT_TRUE(file_contains(react_resource_path, "body: \"_method=DELETE\""));
+    ASSERT_TRUE(file_contains(react_resource_path, "Delete this record?"));
+    ASSERT_TRUE(file_contains(react_registry_path, "postsIndexPage: pages.postsIndexPage"));
 
     remove_if_exists(model_path);
     remove_if_exists(neural_path);
@@ -311,7 +316,9 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     remove_if_exists(view_edit_path);
     remove_if_exists(layout_path);
     remove_glob_matches("db/migrate/*.sql");
-    remove_if_exists(stimulus_controller_path);
+    remove_if_exists(react_entry_path);
+    remove_if_exists(react_registry_path);
+    remove_if_exists(react_resource_path);
     free(routes_backup);
 }
  

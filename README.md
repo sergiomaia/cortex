@@ -169,6 +169,8 @@ Alternate forms: `cortex db create`, `cortex db migrate`.
    make server
    ```
 
+   `make server` now builds JavaScript assets automatically before boot.
+
    (Alternatively, if you run from inside the project directory, `./cortex
    server` will detect “project mode” and delegate to the project `Makefile`.)
 
@@ -190,15 +192,16 @@ Alternate forms: `cortex db create`, `cortex db migrate`.
    Then restart the server (`make server`) so the new controllers and routes
    are compiled and linked.
 
-## JavaScript layer (Rails-like + Stimulus-style)
+## JavaScript layer (Rails-like + React islands)
 
 Cortex now includes a native JavaScript layer designed for server-rendered apps,
 following a Rails-like "convention over configuration" workflow.
 
 ### What is included
 
-- A lightweight Stimulus-style runtime (`Controller` + `Application`)
-- Automatic controller discovery/registration by naming convention
+- React islands mounted automatically from server-rendered templates
+- Scaffold-driven React pages/components for each resource
+- JSON endpoints (`.json`) generated with the scaffold for frontend data
 - `esbuild` as the default bundler
 - Asset fingerprinting + manifest support for production
 - Automatic script injection in rendered HTML (no manual `<script>` tag needed)
@@ -209,6 +212,12 @@ Generated projects and scaffold workflows use:
 
 ```text
 app/javascript/
+  application.jsx
+  resources/
+    index.jsx
+    <resource_plural>/
+      index.jsx
+  # Optional (legacy/non-React scaffold path):
   application.js
   controllers/
     index.js
@@ -220,11 +229,11 @@ public/assets/
   application-<hash>.js
 ```
 
-Controller naming rule:
+React mount convention:
 
-- file: `app/javascript/controllers/post_controller.js`
-- identifier: `post`
-- HTML usage: `data-controller="post"`
+- HTML usage: `data-react-component="postsIndexPage"`
+- props payload: `data-react-props='{"indexJsonPath":"/posts.json"}'`
+- component registry: `app/javascript/resources/index.jsx`
 
 ### CLI commands
 
@@ -232,6 +241,18 @@ Generate a Stimulus-style controller:
 
 ```bash
 ./cortex generate stimulus post
+```
+
+Generate scaffold with React islands (default):
+
+```bash
+./cortex generate scaffold Post title:string body:text
+```
+
+Disable React for scaffold generation:
+
+```bash
+./cortex generate scaffold Post title:string body:text --no-react
 ```
 
 Build JavaScript assets for production:
@@ -246,9 +267,14 @@ Run development mode (JS watch + server):
 ./cortex dev
 ```
 
+`cortex new` now generates a minimal `package.json` with `react`, `react-dom`,
+and `esbuild`. `cortex assets:build` and `cortex dev` automatically run
+`npm install` when dependencies are missing, so no manual frontend setup is
+required.
+
 ### Scaffold integration
 
-`generate scaffold` now integrates JavaScript behavior automatically.
+`generate scaffold` now integrates React islands automatically.
 
 Example:
 
@@ -258,12 +284,15 @@ Example:
 
 In addition to model/controller/views/routes, Cortex also generates:
 
-- `app/javascript/controllers/post_controller.js`
+- `app/javascript/resources/posts/index.jsx`
+- `app/javascript/resources/index.jsx`
 - `app/neural/post_neural_model.c` (AI integration starter template)
-- Stimulus-style attributes in scaffolded HTML:
-  - `data-controller`
-  - `data-action` (for example `submit->post#submit`)
-  - `data-post-target` (target bindings)
+- React mount points in scaffolded HTML:
+  - `data-react-component`
+  - `data-react-props`
+- Rails-like JSON endpoints for each resource:
+  - `GET /posts.json`
+  - `GET /posts/:id.json`
 
 ### Layout/render integration
 
