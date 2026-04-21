@@ -7,6 +7,15 @@
  *   cortex server
  *   cortex new <project_name>
  *   cortex generate controller <name>
+ *   cortex generate neural:model <name>
+ *   cortex generate neural:prompt <name>
+ *   cortex generate neural:agent <name>
+ *   cortex generate neural:rag <name>
+ *   cortex generate neural:stream <name>
+ *   cortex generate neural:memory <name>
+ *   cortex generate neural:retriever <name>
+ *   cortex generate neural:integration <name>
+ *   cortex generate neural:policy <name>
  *   cortex db:migrate
  *   cortex db:create
  *
@@ -24,6 +33,15 @@ typedef enum {
     CLI_COMMAND_GENERATE_MODEL,
     CLI_COMMAND_GENERATE_SERVICE,
     CLI_COMMAND_GENERATE_SCAFFOLD,
+    CLI_COMMAND_GENERATE_NEURAL_MODEL,
+    CLI_COMMAND_GENERATE_NEURAL_PROMPT,
+    CLI_COMMAND_GENERATE_NEURAL_AGENT,
+    CLI_COMMAND_GENERATE_NEURAL_RAG,
+    CLI_COMMAND_GENERATE_NEURAL_STREAM,
+    CLI_COMMAND_GENERATE_NEURAL_MEMORY,
+    CLI_COMMAND_GENERATE_NEURAL_RETRIEVER,
+    CLI_COMMAND_GENERATE_NEURAL_INTEGRATION,
+    CLI_COMMAND_GENERATE_NEURAL_POLICY,
     CLI_COMMAND_GENERATE_STIMULUS,
     CLI_COMMAND_DEV,
     CLI_COMMAND_ASSETS_BUILD,

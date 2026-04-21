@@ -237,6 +237,15 @@ React mount convention:
 
 ### CLI commands
 
+Generate common MVC building blocks:
+
+```bash
+./cortex generate controller users
+./cortex generate resource posts
+./cortex generate model post
+./cortex generate service mailer
+```
+
 Generate a Stimulus-style controller:
 
 ```bash
@@ -254,6 +263,32 @@ Disable React for scaffold generation:
 ```bash
 ./cortex generate scaffold Post title:string body:text --no-react
 ```
+
+Generate Neural module starters:
+
+```bash
+./cortex generate neural:model incident
+./cortex generate neural:prompt incident
+./cortex generate neural:agent incident
+./cortex generate neural:rag incident
+./cortex generate neural:stream incident
+./cortex generate neural:memory incident
+./cortex generate neural:retriever incident
+./cortex generate neural:integration openai
+./cortex generate neural:policy incident
+```
+
+Neural generator outputs:
+
+- `neural:model` -> `app/neural/<name>_neural_model.c` with `system_prompt` and enrich hook.
+- `neural:prompt` -> `app/neural/prompts/<name>_prompt.c` with `neural_prompt_render` starter template.
+- `neural:agent` -> `app/neural/agents/<name>_agent.c` with tool registration/bootstrap flow.
+- `neural:rag` -> `app/neural/rag/<name>_rag.c` with `RAGEngine` init/store/query helpers.
+- `neural:stream` -> `app/neural/streams/<name>_stream.c` with token callback streaming stub.
+- `neural:memory` -> `app/neural/memory/<name>_memory.c` with remember/recall wrappers.
+- `neural:retriever` -> `app/neural/retrievers/<name>_retriever.c` with embed/index/search wrappers.
+- `neural:integration` -> `app/neural/integrations/<name>_integration.c` with `LLMIntegration` adapter starter.
+- `neural:policy` -> `app/neural/policies/<name>_policy.c` with prompt guardrails and token budget defaults.
 
 Build JavaScript assets for production:
 
