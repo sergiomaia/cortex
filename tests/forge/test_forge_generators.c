@@ -5,6 +5,7 @@
  #include <sys/stat.h>
  #include <errno.h>
  #include <glob.h>
+#include <unistd.h>
  
  #include "../../forge/forge_generators.h"
  
@@ -200,13 +201,21 @@ void test_forge_generate_model_plural_input_creates_singular_model(void) {
  }
 
 void test_forge_generate_resource_creates_controller_and_views(void) {
-    const char *name = "post";
-    const char *controller_path = "app/controllers/posts_controller.c";
-    const char *index_view_path = "app/views/posts/index.html";
-    const char *show_view_path = "app/views/posts/show.html";
-    const char *new_view_path = "app/views/posts/new.html";
-    const char *edit_view_path = "app/views/posts/edit.html";
-    const char *model_path = "app/models/post.c";
+   const char *name = "specpost";
+    const char *controller_path = "app/controllers/specposts_controller.c";
+    const char *index_view_path = "app/views/specposts/index.html";
+    const char *show_view_path = "app/views/specposts/show.html";
+    const char *new_view_path = "app/views/specposts/new.html";
+    const char *edit_view_path = "app/views/specposts/edit.html";
+    const char *model_path = "app/models/specpost.c";
+    const char *routes_path = "config/routes.c";
+    int had_routes_file = file_exists(routes_path);
+    char *routes_backup = NULL;
+
+    if (had_routes_file) {
+        routes_backup = read_file_alloc(routes_path);
+        ASSERT_TRUE(routes_backup != NULL);
+    }
 
     remove_if_exists(controller_path);
     remove_if_exists(index_view_path);
@@ -214,6 +223,9 @@ void test_forge_generate_resource_creates_controller_and_views(void) {
     remove_if_exists(new_view_path);
     remove_if_exists(edit_view_path);
     remove_if_exists(model_path);
+    if (!had_routes_file) {
+        remove_if_exists(routes_path);
+    }
 
     ASSERT_EQ(forge_generate_resource(name), 0);
     ASSERT_TRUE(file_exists(controller_path));
@@ -228,36 +240,83 @@ void test_forge_generate_resource_creates_controller_and_views(void) {
     remove_if_exists(show_view_path);
     remove_if_exists(new_view_path);
     remove_if_exists(edit_view_path);
+    if (had_routes_file && routes_backup) {
+        ASSERT_EQ(write_file_from_string(routes_path, routes_backup), 0);
+    } else {
+        remove_if_exists(routes_path);
+    }
+    free(routes_backup);
 }
 
 void test_forge_generate_resource_plural_input_keeps_rails_naming(void) {
-   const char *name = "Pages";
-   const char *controller_path = "app/controllers/pages_controller.c";
-   const char *index_view_path = "app/views/pages/index.html";
-   const char *wrong_controller_path = "app/controllers/pagess_controller.c";
-   const char *wrong_view_dir_index_path = "app/views/pagess/index.html";
-   const char *model_path = "app/models/page.c";
-   const char *wrong_model_path = "app/models/pages.c";
+   const char *name = "Otters";
+   const char *controller_path = "app/controllers/otters_controller.c";
+   const char *index_view_path = "app/views/otters/index.html";
+   const char *show_view_path = "app/views/otters/show.html";
+   const char *new_view_path = "app/views/otters/new.html";
+   const char *edit_view_path = "app/views/otters/edit.html";
+   const char *wrong_controller_path = "app/controllers/otterss_controller.c";
+   const char *wrong_view_dir_index_path = "app/views/otterss/index.html";
+   const char *wrong_view_dir_show_path = "app/views/otterss/show.html";
+   const char *wrong_view_dir_new_path = "app/views/otterss/new.html";
+   const char *wrong_view_dir_edit_path = "app/views/otterss/edit.html";
+   const char *model_path = "app/models/otter.c";
+   const char *wrong_model_path = "app/models/otters.c";
+   const char *routes_path = "config/routes.c";
+   int had_routes_file = file_exists(routes_path);
+   char *routes_backup = NULL;
+
+   if (had_routes_file) {
+       routes_backup = read_file_alloc(routes_path);
+       ASSERT_TRUE(routes_backup != NULL);
+   }
 
    remove_if_exists(controller_path);
    remove_if_exists(index_view_path);
+   remove_if_exists(show_view_path);
+   remove_if_exists(new_view_path);
+   remove_if_exists(edit_view_path);
    remove_if_exists(wrong_controller_path);
    remove_if_exists(wrong_view_dir_index_path);
+   remove_if_exists(wrong_view_dir_show_path);
+   remove_if_exists(wrong_view_dir_new_path);
+   remove_if_exists(wrong_view_dir_edit_path);
    remove_if_exists(model_path);
    remove_if_exists(wrong_model_path);
+   if (!had_routes_file) {
+       remove_if_exists(routes_path);
+   }
 
    ASSERT_EQ(forge_generate_resource(name), 0);
    ASSERT_TRUE(file_exists(controller_path));
    ASSERT_TRUE(file_exists(index_view_path));
+   ASSERT_TRUE(file_exists(show_view_path));
+   ASSERT_TRUE(file_exists(new_view_path));
+   ASSERT_TRUE(file_exists(edit_view_path));
    ASSERT_TRUE(!file_exists(wrong_controller_path));
    ASSERT_TRUE(!file_exists(wrong_view_dir_index_path));
+   ASSERT_TRUE(!file_exists(wrong_view_dir_show_path));
+   ASSERT_TRUE(!file_exists(wrong_view_dir_new_path));
+   ASSERT_TRUE(!file_exists(wrong_view_dir_edit_path));
    ASSERT_TRUE(!file_exists(model_path));
    ASSERT_TRUE(!file_exists(wrong_model_path));
 
    remove_if_exists(controller_path);
    remove_if_exists(index_view_path);
+   remove_if_exists(show_view_path);
+   remove_if_exists(new_view_path);
+   remove_if_exists(edit_view_path);
    remove_if_exists(wrong_controller_path);
    remove_if_exists(wrong_view_dir_index_path);
+   remove_if_exists(wrong_view_dir_show_path);
+   remove_if_exists(wrong_view_dir_new_path);
+   remove_if_exists(wrong_view_dir_edit_path);
+   if (had_routes_file && routes_backup) {
+       ASSERT_EQ(write_file_from_string(routes_path, routes_backup), 0);
+   } else {
+       remove_if_exists(routes_path);
+   }
+   free(routes_backup);
 }
 
 void test_forge_generate_service_creates_service_file(void) {
@@ -323,18 +382,18 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     const char *attrs[] = {"title:string", "email:string", "body:text", "published:boolean"};
     const int attr_count = 4;
 
-    const char *model_path = "app/models/post.c";
-    const char *neural_path = "app/neural/post_neural_model.c";
-    const char *controller_path = "app/controllers/posts_controller.c";
+    const char *model_path = "app/models/specpost.c";
+    const char *neural_path = "app/neural/specpost_neural_model.c";
+    const char *controller_path = "app/controllers/specposts_controller.c";
     const char *routes_path = "config/routes.c";
-    const char *view_index_path = "app/views/posts/index.html";
-    const char *view_show_path = "app/views/posts/show.html";
-    const char *view_new_path = "app/views/posts/new.html";
-    const char *view_edit_path = "app/views/posts/edit.html";
+    const char *view_index_path = "app/views/specposts/index.html";
+    const char *view_show_path = "app/views/specposts/show.html";
+    const char *view_new_path = "app/views/specposts/new.html";
+    const char *view_edit_path = "app/views/specposts/edit.html";
     const char *layout_path = "app/views/layouts/application.html";
     const char *react_entry_path = "app/javascript/application.jsx";
     const char *react_registry_path = "app/javascript/resources/index.jsx";
-    const char *react_resource_path = "app/javascript/resources/posts/index.jsx";
+    const char *react_resource_path = "app/javascript/resources/specposts/index.jsx";
     int had_routes_file = file_exists(routes_path);
     char *routes_backup = NULL;
 
@@ -354,12 +413,12 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     remove_if_exists(view_new_path);
     remove_if_exists(view_edit_path);
     remove_if_exists(layout_path);
-    remove_scaffold_migrations_for_table("posts");
+    remove_scaffold_migrations_for_table("specposts");
     remove_if_exists(react_entry_path);
     remove_if_exists(react_registry_path);
     remove_if_exists(react_resource_path);
 
-    ASSERT_EQ(forge_generate_scaffold("Post", attr_count, attrs, 1), 0);
+    ASSERT_EQ(forge_generate_scaffold("Specpost", attr_count, attrs, 1), 0);
 
     ASSERT_TRUE(file_exists(model_path));
     ASSERT_TRUE(file_exists(neural_path));
@@ -375,55 +434,55 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_exists(react_resource_path));
 
     ASSERT_TRUE(file_contains(layout_path, "{{yield}}"));
-    ASSERT_TRUE(any_migration_file_contains("CREATE TABLE posts"));
+    ASSERT_TRUE(any_migration_file_contains("CREATE TABLE specposts"));
     ASSERT_TRUE(any_migration_file_contains("created_at"));
-    ASSERT_TRUE(file_contains(view_index_path, "data-react-component=\"postsIndexPage\""));
-    ASSERT_TRUE(file_contains(view_index_path, "<a href=\"/posts/new\">New Post</a>"));
-    ASSERT_TRUE(file_contains(view_show_path, "data-react-component=\"postsShowPage\""));
-    ASSERT_TRUE(file_contains(view_new_path, "data-react-component=\"postsFormPage\""));
-    ASSERT_TRUE(file_contains(view_new_path, "<form method=\"POST\" action=\"/posts\">"));
-    ASSERT_TRUE(file_contains(view_edit_path, "data-react-component=\"postsFormPage\""));
-    ASSERT_TRUE(file_contains(view_edit_path, "<form method=\"POST\" action=\"/posts/1\">"));
-    ASSERT_TRUE(file_contains(controller_path, "render_view(res, \"posts/index\")"));
-    ASSERT_TRUE(file_contains(controller_path, "render_view(res, \"posts/show\")"));
-    ASSERT_TRUE(file_contains(controller_path, "FROM posts ORDER BY id ASC"));
+    ASSERT_TRUE(file_contains(view_index_path, "data-react-component=\"specpostsIndexPage\""));
+    ASSERT_TRUE(file_contains(view_index_path, "<a href=\"/specposts/new\">New Specpost</a>"));
+    ASSERT_TRUE(file_contains(view_show_path, "data-react-component=\"specpostsShowPage\""));
+    ASSERT_TRUE(file_contains(view_new_path, "data-react-component=\"specpostsFormPage\""));
+    ASSERT_TRUE(file_contains(view_new_path, "<form method=\"POST\" action=\"/specposts\">"));
+    ASSERT_TRUE(file_contains(view_edit_path, "data-react-component=\"specpostsFormPage\""));
+    ASSERT_TRUE(file_contains(view_edit_path, "<form method=\"POST\" action=\"/specposts/1\">"));
+    ASSERT_TRUE(file_contains(controller_path, "render_view(res, \"specposts/index\")"));
+    ASSERT_TRUE(file_contains(controller_path, "render_view(res, \"specposts/show\")"));
+    ASSERT_TRUE(file_contains(controller_path, "FROM specposts ORDER BY id ASC"));
     ASSERT_TRUE(file_contains(controller_path, "action_response_set_content_type(res, \"application/json\")"));
-    ASSERT_TRUE(file_contains(controller_path, "INSERT INTO posts"));
-    ASSERT_TRUE(file_contains(controller_path, "UPDATE posts SET"));
+    ASSERT_TRUE(file_contains(controller_path, "INSERT INTO specposts"));
+    ASSERT_TRUE(file_contains(controller_path, "UPDATE specposts SET"));
 
     /* Fields should be parsed into active_model_set_field calls. */
-    ASSERT_TRUE(file_contains(model_path, "post_set_title"));
+    ASSERT_TRUE(file_contains(model_path, "specpost_set_title"));
     ASSERT_TRUE(file_contains(model_path, "active_model_set_field(m, \"title\", title)"));
-    ASSERT_TRUE(file_contains(model_path, "post_set_body"));
+    ASSERT_TRUE(file_contains(model_path, "specpost_set_body"));
     ASSERT_TRUE(file_contains(model_path, "active_model_set_field(m, \"body\", body)"));
-    ASSERT_TRUE(file_contains(neural_path, "post_neural_system_prompt"));
-    ASSERT_TRUE(file_contains(neural_path, "post_neural_enrich"));
+    ASSERT_TRUE(file_contains(neural_path, "specpost_neural_system_prompt"));
+    ASSERT_TRUE(file_contains(neural_path, "specpost_neural_enrich"));
     ASSERT_TRUE(file_contains(neural_path, "Starting point for AI features"));
 
     /* Controller REST-style stubs should exist. */
-    ASSERT_TRUE(file_contains(controller_path, "void posts_index("));
-    ASSERT_TRUE(file_contains(controller_path, "void posts_new("));
-    ASSERT_TRUE(file_contains(controller_path, "void posts_edit("));
-    ASSERT_TRUE(file_contains(controller_path, "void posts_create("));
-    ASSERT_TRUE(file_contains(controller_path, "void posts_update("));
+    ASSERT_TRUE(file_contains(controller_path, "void specposts_index("));
+    ASSERT_TRUE(file_contains(controller_path, "void specposts_new("));
+    ASSERT_TRUE(file_contains(controller_path, "void specposts_edit("));
+    ASSERT_TRUE(file_contains(controller_path, "void specposts_create("));
+    ASSERT_TRUE(file_contains(controller_path, "void specposts_update("));
 
     /* Routes should include resource endpoints. */
     ASSERT_TRUE(file_contains(routes_path, "app_register_routes"));
-    ASSERT_TRUE(file_contains(routes_path, "route_get(router, \"/posts\", posts_index)"));
-    ASSERT_TRUE(file_contains(routes_path, "route_post(router, \"/posts\", posts_create)"));
-    ASSERT_TRUE(file_contains(routes_path, "route_post(router, \"/posts/:id\", posts_update)"));
-    ASSERT_TRUE(file_contains(routes_path, "route_put(router, \"/posts/:id\", posts_update)"));
+    ASSERT_TRUE(file_contains(routes_path, "route_get(router, \"/specposts\", specposts_index)"));
+    ASSERT_TRUE(file_contains(routes_path, "route_post(router, \"/specposts\", specposts_create)"));
+    ASSERT_TRUE(file_contains(routes_path, "route_post(router, \"/specposts/:id\", specposts_update)"));
+    ASSERT_TRUE(file_contains(routes_path, "route_put(router, \"/specposts/:id\", specposts_update)"));
 
     /* new/edit views should include scaffold form fields from attributes. */
-    ASSERT_TRUE(file_contains(routes_path, "route_get(router, \"/posts.json\", posts_index)"));
-    ASSERT_TRUE(file_contains(routes_path, "route_get(router, \"/posts/:id.json\", posts_show)"));
-    ASSERT_TRUE(file_contains(react_resource_path, "export function postsIndexPage"));
-    ASSERT_TRUE(file_contains(react_resource_path, "export function postsShowPage"));
-    ASSERT_TRUE(file_contains(react_resource_path, "export function postsFormPage"));
+    ASSERT_TRUE(file_contains(routes_path, "route_get(router, \"/specposts.json\", specposts_index)"));
+    ASSERT_TRUE(file_contains(routes_path, "route_get(router, \"/specposts/:id.json\", specposts_show)"));
+    ASSERT_TRUE(file_contains(react_resource_path, "export function specpostsIndexPage"));
+    ASSERT_TRUE(file_contains(react_resource_path, "export function specpostsShowPage"));
+    ASSERT_TRUE(file_contains(react_resource_path, "export function specpostsFormPage"));
     ASSERT_TRUE(file_contains(react_resource_path, "href: `/${resource}/${row.id}/edit`"));
     ASSERT_TRUE(file_contains(react_resource_path, "body: \"_method=DELETE\""));
     ASSERT_TRUE(file_contains(react_resource_path, "Delete this record?"));
-    ASSERT_TRUE(file_contains(react_registry_path, "postsIndexPage: pages.postsIndexPage"));
+    ASSERT_TRUE(file_contains(react_registry_path, "specpostsIndexPage: pages.specpostsIndexPage"));
 
     remove_if_exists(model_path);
     remove_if_exists(neural_path);
@@ -438,7 +497,7 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     remove_if_exists(view_new_path);
     remove_if_exists(view_edit_path);
     remove_if_exists(layout_path);
-    remove_scaffold_migrations_for_table("posts");
+    remove_scaffold_migrations_for_table("specposts");
     remove_if_exists(react_entry_path);
     remove_if_exists(react_registry_path);
     remove_if_exists(react_resource_path);
@@ -448,22 +507,43 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
 void test_forge_scaffold_plural_input_uses_plural_controller_and_singular_model(void) {
     const char *attrs[] = {"title:string"};
     const int attr_count = 1;
-    const char *model_path = "app/models/page.c";
-    const char *controller_path = "app/controllers/pages_controller.c";
-    const char *view_index_path = "app/views/pages/index.html";
-    const char *wrong_model_path = "app/models/pages.c";
-    const char *wrong_controller_path = "app/controllers/pagess_controller.c";
-    const char *wrong_view_path = "app/views/pagess/index.html";
+    const char *model_path = "app/models/zebra.c";
+    const char *neural_path = "app/neural/zebra_neural_model.c";
+    const char *controller_path = "app/controllers/zebras_controller.c";
+    const char *js_controller_path = "app/javascript/controllers/zebra_controller.js";
+    const char *view_index_path = "app/views/zebras/index.html";
+    const char *view_show_path = "app/views/zebras/show.html";
+    const char *view_new_path = "app/views/zebras/new.html";
+    const char *view_edit_path = "app/views/zebras/edit.html";
+    const char *wrong_model_path = "app/models/zebras.c";
+    const char *wrong_controller_path = "app/controllers/zebrass_controller.c";
+    const char *wrong_view_path = "app/views/zebrass/index.html";
+    const char *routes_path = "config/routes.c";
+    int had_routes_file = file_exists(routes_path);
+    char *routes_backup = NULL;
+
+    if (had_routes_file) {
+        routes_backup = read_file_alloc(routes_path);
+        ASSERT_TRUE(routes_backup != NULL);
+    }
 
     remove_if_exists(model_path);
+    remove_if_exists(neural_path);
     remove_if_exists(controller_path);
+    remove_if_exists(js_controller_path);
     remove_if_exists(view_index_path);
+    remove_if_exists(view_show_path);
+    remove_if_exists(view_new_path);
+    remove_if_exists(view_edit_path);
     remove_if_exists(wrong_model_path);
     remove_if_exists(wrong_controller_path);
     remove_if_exists(wrong_view_path);
-    remove_scaffold_migrations_for_table("pages");
+    if (!had_routes_file) {
+        remove_if_exists(routes_path);
+    }
+    remove_scaffold_migrations_for_table("zebras");
 
-    ASSERT_EQ(forge_generate_scaffold("Pages", attr_count, attrs, 0), 0);
+    ASSERT_EQ(forge_generate_scaffold("Zebras", attr_count, attrs, 0), 0);
     ASSERT_TRUE(file_exists(model_path));
     ASSERT_TRUE(file_exists(controller_path));
     ASSERT_TRUE(file_exists(view_index_path));
@@ -472,8 +552,20 @@ void test_forge_scaffold_plural_input_uses_plural_controller_and_singular_model(
     ASSERT_TRUE(!file_exists(wrong_view_path));
 
     remove_if_exists(model_path);
+    remove_if_exists(neural_path);
     remove_if_exists(controller_path);
+    remove_if_exists(js_controller_path);
     remove_if_exists(view_index_path);
-    remove_scaffold_migrations_for_table("pages");
+    remove_if_exists(view_show_path);
+    remove_if_exists(view_new_path);
+    remove_if_exists(view_edit_path);
+    remove_scaffold_migrations_for_table("zebras");
+    rmdir("app/views/zebras");
+    if (had_routes_file && routes_backup) {
+        ASSERT_EQ(write_file_from_string(routes_path, routes_backup), 0);
+    } else {
+        remove_if_exists(routes_path);
+    }
+    free(routes_backup);
 }
  
