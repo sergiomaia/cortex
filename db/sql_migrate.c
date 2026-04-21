@@ -14,6 +14,28 @@ static int ensure_sql_migration_table(DbConnection *conn) {
     return db_connection_exec(conn, ddl);
 }
 
+static int sql_migration_table_exists(DbConnection *conn) {
+    DbStatement *st = NULL;
+    int step;
+    int exists = 0;
+
+    if (db_connection_prepare(
+            conn,
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'cortex_sql_migrations'",
+            &st) != 0) {
+        return -1;
+    }
+    step = db_statement_step(st);
+    if (step == 1) {
+        exists = 1;
+    } else if (step < 0) {
+        db_statement_finalize(st);
+        return -1;
+    }
+    db_statement_finalize(st);
+    return exists;
+}
+
 static int sql_migration_executed(DbConnection *conn, const char *name) {
     DbStatement *st = NULL;
     int step;
@@ -100,6 +122,86 @@ static int cmp_cstr(const void *a, const void *b) {
     const char *const *sa = (const char *const *)a;
     const char *const *sb = (const char *const *)b;
     return strcmp(*sa, *sb);
+}
+
+int db_sql_migrations_has_pending(DbConnection *conn, int *out_has_pending) {
+    glob_t g;
+    size_t i;
+    int rc;
+    const char **names = NULL;
+    size_t count = 0;
+    int has_pending = 0;
+    int table_exists = 0;
+    int ret = 0;
+
+    if (!conn || !out_has_pending) {
+        return -1;
+    }
+    *out_has_pending = 0;
+
+    rc = glob("db/migrate/*.sql", 0, NULL, &g);
+    if (rc == GLOB_NOMATCH) {
+        globfree(&g);
+        return 0;
+    }
+    if (rc != 0) {
+        fprintf(stderr, "db: glob db/migrate/*.sql failed\n");
+        globfree(&g);
+        return -1;
+    }
+
+    count = g.gl_pathc;
+    if (count == 0) {
+        globfree(&g);
+        return 0;
+    }
+
+    table_exists = sql_migration_table_exists(conn);
+    if (table_exists < 0) {
+        globfree(&g);
+        return -1;
+    }
+    if (!table_exists) {
+        *out_has_pending = 1;
+        globfree(&g);
+        return 0;
+    }
+
+    names = (const char **)malloc(count * sizeof(const char *));
+    if (!names) {
+        globfree(&g);
+        return -1;
+    }
+    for (i = 0; i < count; ++i) {
+        names[i] = g.gl_pathv[i];
+    }
+    qsort(names, count, sizeof(names[0]), cmp_cstr);
+
+    for (i = 0; i < count; ++i) {
+        const char *path = names[i];
+        const char *base = strrchr(path, '/');
+        int ex;
+
+        base = base ? base + 1 : path;
+        ex = sql_migration_executed(conn, base);
+        if (ex < 0) {
+            ret = -1;
+            break;
+        }
+        if (!ex) {
+            has_pending = 1;
+            break;
+        }
+    }
+
+    free(names);
+    globfree(&g);
+
+    if (ret != 0) {
+        return ret;
+    }
+    *out_has_pending = has_pending;
+    return 0;
 }
 
 int db_sql_migrations_run(DbConnection *conn) {

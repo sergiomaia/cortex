@@ -107,6 +107,7 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void);
 void test_forge_scaffold_plural_input_uses_plural_controller_and_singular_model(void);
 void test_db_create_creates_db_folder_and_storage_file(void);
 void test_db_migrate_runs_pending_and_tracks_executed(void);
+void test_db_migrate_default_has_pending_tracks_sql_files(void);
 void test_db_migration_generator_creates_timestamped_file_with_up_down(void);
 
 void test_cli_parse_server_command(void);
@@ -363,6 +364,7 @@ static void run_all_tests(void) {
 
     test_db_create_creates_db_folder_and_storage_file();
     test_db_migrate_runs_pending_and_tracks_executed();
+    test_db_migrate_default_has_pending_tracks_sql_files();
     test_db_migration_generator_creates_timestamped_file_with_up_down();
 
     test_cli_parse_server_command();

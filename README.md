@@ -113,7 +113,7 @@ Cortex uses **SQLite as the default database**, in the spirit of Rails: **zero Y
 - **`db/db_connection.h`** — Small, engine-agnostic API: connect, `exec`, prepared statements (`prepare` / `step` / `bind_int` / `column_int` / `finalize`), close. Call sites should depend on this header, not on SQLite directly.
 - **`db/sqlite/sqlite_adapter.c`** — Implements that API with the SQLite C API (`sqlite3.h`).
 - **`db/db_bootstrap.h`** — Application lifecycle:
-  - **`cortex_db_bootstrap()`** — Runs pending migrations (`db_migrate_default()`), then opens a **single** process-wide connection via **`cortex_db_init()`** (reuse across requests in the same process).
+  - **`cortex_db_bootstrap()`** — Checks pending migrations before boot; if any are pending, it prints guidance to run **`cortex db:migrate`** and aborts startup. When up to date, it opens a **single** process-wide connection via **`cortex_db_init()`** (reuse across requests in the same process).
   - **`cortex_db_shutdown()`** — Closes the connection on exit.
   - **`cortex_db_exec(const char *sql)`** — Convenience wrapper around the active connection (for migrations or app code that runs SQL strings).
 
@@ -136,7 +136,7 @@ Alternate forms: `cortex db create`, `cortex db migrate`.
 ### New projects (`cortex new`)
 
 - Creates **`db/`** and **`db/development.sqlite3`** immediately (empty database file).
-- Generated **`main.c`** includes **`db/db_bootstrap.h`** and calls **`cortex_db_bootstrap()`** before serving, and **`cortex_db_shutdown()`** when the server loop ends. First boot creates the file (if missing), applies migrations, and keeps one connection open.
+- Generated **`main.c`** includes **`db/db_bootstrap.h`** and calls **`cortex_db_bootstrap()`** before serving, and **`cortex_db_shutdown()`** when the server loop ends. Boot now fails fast when migrations are pending, matching the Rails-style warning flow.
 
 ### Building the framework and SQLite
 
@@ -162,10 +162,11 @@ Alternate forms: `cortex db create`, `cortex db migrate`.
    ./cortex new blog
    ```
 
-3. Enter the project directory and start the web server:
+3. Enter the project directory, run migrations, and start the web server:
 
    ```bash
    cd blog
+   ../cortex db:migrate
    make server
    ```
 
@@ -176,7 +177,7 @@ Alternate forms: `cortex db create`, `cortex db migrate`.
 
 4. Open `http://localhost:3000`. You should see the Cortex welcome page.
 
-5. Database (optional if you already started the server): **`cortex_db_bootstrap()`** in the generated app already creates the file and runs migrations on boot. To run the same steps manually from the project directory (adjust the path to the `cortex` binary if needed):
+5. Database (required before boot when there are pending migrations): if startup reports pending migrations, run:
 
    ```bash
    ../cortex db:create

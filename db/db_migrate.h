@@ -19,8 +19,16 @@ typedef struct {
  */
 int db_migrate(const char *storage_path, const DbMigration *migrations, int migration_count);
 
+/* Check whether there are pending migrations (C registry and/or SQL files)
+ * without applying them.
+ *
+ * out_has_pending: 1 if pending migrations exist, 0 otherwise.
+ */
+int db_migrate_has_pending(const char *storage_path, const DbMigration *migrations, int migration_count, int *out_has_pending);
+
 /* Convenience default migrations for this scaffold. NULL path selects the default SQLite file. */
 int db_migrate_default(const char *storage_path);
+int db_migrate_default_has_pending(const char *storage_path, int *out_has_pending);
 
 #endif /* DB_MIGRATE_H */
 

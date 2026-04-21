@@ -49,15 +49,20 @@ void cortex_db_shutdown(void) {
 
 int cortex_db_bootstrap(void) {
     char path[512];
+    int has_pending = 0;
 
     if (db_path_for_environment(NULL, path, sizeof(path)) != 0) {
         fprintf(stderr, "db: failed to resolve database path\n");
         return -1;
     }
 
-    /* Apply pending migrations first (creates the file and schema_migrations). */
-    if (db_migrate_default(path) != 0) {
-        fprintf(stderr, "db: migrations failed\n");
+    if (db_migrate_default_has_pending(path, &has_pending) != 0) {
+        fprintf(stderr, "db: failed to check pending migrations\n");
+        return -1;
+    }
+    if (has_pending) {
+        fprintf(stderr, "db: pending migrations detected for '%s'\n", path);
+        fprintf(stderr, "db: run `cortex db:migrate` before starting the server\n");
         return -1;
     }
 
