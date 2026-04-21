@@ -265,6 +265,57 @@ static int file_contains(const char *path, const char *substring) {
     return found;
 }
 
+static char *read_file_alloc(const char *path) {
+    FILE *f;
+    long sz;
+    size_t nread;
+    char *buf;
+
+    f = fopen(path, "rb");
+    if (!f) return NULL;
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return NULL;
+    }
+    sz = ftell(f);
+    if (sz < 0) {
+        fclose(f);
+        return NULL;
+    }
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return NULL;
+    }
+    buf = (char *)malloc((size_t)sz + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    nread = fread(buf, 1, (size_t)sz, f);
+    fclose(f);
+    if (nread != (size_t)sz) {
+        free(buf);
+        return NULL;
+    }
+    buf[sz] = '\0';
+    return buf;
+}
+
+static int write_file_from_string(const char *path, const char *content) {
+    FILE *f;
+    size_t len;
+    size_t nwritten;
+
+    if (!path || !content) return -1;
+    f = fopen(path, "wb");
+    if (!f) return -1;
+    len = strlen(content);
+    nwritten = fwrite(content, 1, len, f);
+    if (fclose(f) != 0) return -1;
+    if (nwritten != len) return -1;
+    return 0;
+}
+
 /* Remove generated project dir and contents so tests don't leave artifacts. */
 static void remove_project_dir(const char *project_name) {
     char cmd[512];
@@ -306,15 +357,32 @@ void test_cli_dispatch_generate_controller_executes_handler(void) {
 }
 
 void test_cli_dispatch_generate_resource_executes_handler(void) {
-    const char *controller_path = "app/controllers/posts_controller.c";
-    const char *index_view_path = "app/views/posts/index.html";
+    const char *controller_path = "app/controllers/specclis_controller.c";
+    const char *index_view_path = "app/views/specclis/index.html";
+    const char *show_view_path = "app/views/specclis/show.html";
+    const char *new_view_path = "app/views/specclis/new.html";
+    const char *edit_view_path = "app/views/specclis/edit.html";
+    const char *routes_path = "config/routes.c";
     CliParsed parsed;
+    int had_routes_file = file_exists(routes_path);
+    char *routes_backup = NULL;
+
+    if (had_routes_file) {
+        routes_backup = read_file_alloc(routes_path);
+        ASSERT_TRUE(routes_backup != NULL);
+    }
 
     remove_if_exists(controller_path);
     remove_if_exists(index_view_path);
+    remove_if_exists(show_view_path);
+    remove_if_exists(new_view_path);
+    remove_if_exists(edit_view_path);
+    if (!had_routes_file) {
+        remove_if_exists(routes_path);
+    }
 
     parsed.command = CLI_COMMAND_GENERATE_RESOURCE;
-    parsed.name = "post";
+    parsed.name = "speccli";
 
     ASSERT_EQ(cli_dispatch(&parsed), 0);
     ASSERT_TRUE(file_exists(controller_path));
@@ -322,6 +390,15 @@ void test_cli_dispatch_generate_resource_executes_handler(void) {
 
     remove_if_exists(controller_path);
     remove_if_exists(index_view_path);
+    remove_if_exists(show_view_path);
+    remove_if_exists(new_view_path);
+    remove_if_exists(edit_view_path);
+    if (had_routes_file && routes_backup) {
+        ASSERT_EQ(write_file_from_string(routes_path, routes_backup), 0);
+    } else {
+        remove_if_exists(routes_path);
+    }
+    free(routes_backup);
 }
 
 void test_cli_dispatch_generate_model_executes_handler(void) {

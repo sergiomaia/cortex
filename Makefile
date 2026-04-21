@@ -77,13 +77,13 @@ TEST_SRCS := tests/test_runner.c \
              tests/db/test_db_migration_generator.c \
              tests/cli/test_cli.c \
              tests/cli/test_cli_server.c
-TEST_BIN := tests/test_runner
+TEST_BIN := build/tests/test_runner
 
 EXE := cortex
 LIB := libcortex.a
 MAIN_OBJ := $(CLI_MAIN_SRC:.c=.o)
 
-.PHONY: all clean rebuild test vendor-sqlite
+.PHONY: all clean rebuild test tests vendor-sqlite
 
 all: $(LIB) $(EXE)
 
@@ -103,6 +103,7 @@ $(LIB): $(OBJS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(TEST_BIN): $(LIB) $(TEST_SRCS)
+	@mkdir -p $(dir $(TEST_BIN))
 	$(CC) $(CFLAGS) $(TEST_SRCS) -L. -lcortex -lm -o $(TEST_BIN)
 
 $(EXE): $(LIB) $(MAIN_OBJ)
@@ -110,6 +111,8 @@ $(EXE): $(LIB) $(MAIN_OBJ)
 
 test: $(TEST_BIN)
 	./$(TEST_BIN)
+
+tests: test
 
 clean:
 	rm -f $(OBJS) $(LIB) $(TEST_BIN) $(EXE) $(MAIN_OBJ)
