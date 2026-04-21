@@ -43,6 +43,22 @@ static void remove_if_exists(const char *path) {
     }
 }
 
+static int write_file_from_string(const char *path, const char *content) {
+    FILE *f;
+    size_t len;
+    size_t written;
+
+    if (!path || !content) return -1;
+    f = fopen(path, "w");
+    if (!f) return -1;
+
+    len = strlen(content);
+    written = fwrite(content, 1, len, f);
+    if (fclose(f) != 0) return -1;
+    if (written != len) return -1;
+    return 0;
+}
+
 static int db_file_read_all(const char *path, char *out, size_t out_size) {
     FILE *f;
     size_t nread;
@@ -113,6 +129,28 @@ void test_db_migrate_runs_pending_and_tracks_executed(void) {
     ASSERT_STR_EQ(content_before, content_after);
 
     /* Cleanup. */
+    remove_if_exists(storage);
+}
+
+void test_db_migrate_default_has_pending_tracks_sql_files(void) {
+    const char *storage = "db/test_storage_pending.sqlite3";
+    const char *migration_path = "db/migrate/20990101010101_pending_spec.sql";
+    int has_pending = 0;
+
+    remove_if_exists(storage);
+    remove_if_exists(migration_path);
+
+    ASSERT_EQ(db_create(storage), 0);
+    ASSERT_EQ(write_file_from_string(migration_path, "CREATE TABLE pending_specs (id INTEGER PRIMARY KEY);\n"), 0);
+
+    ASSERT_EQ(db_migrate_default_has_pending(storage, &has_pending), 0);
+    ASSERT_EQ(has_pending, 1);
+
+    ASSERT_EQ(db_migrate_default(storage), 0);
+    ASSERT_EQ(db_migrate_default_has_pending(storage, &has_pending), 0);
+    ASSERT_EQ(has_pending, 0);
+
+    remove_if_exists(migration_path);
     remove_if_exists(storage);
 }
 

@@ -2696,7 +2696,7 @@ int forge_new_project(const char *project_name) {
         "    (void)argc;\n"
         "    (void)argv;\n"
         "    if (cortex_db_bootstrap() != 0) {\n"
-        "        fprintf(stderr, \"database bootstrap failed\\n\");\n"
+        "        fprintf(stderr, \"database bootstrap failed (check migration status)\\n\");\n"
         "        return 1;\n"
         "    }\n"
         "    ActionRouter router;\n"

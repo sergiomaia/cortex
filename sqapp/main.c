@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
     if (cortex_db_bootstrap() != 0) {
-        fprintf(stderr, "database bootstrap failed\n");
+        fprintf(stderr, "database bootstrap failed (check migration status)\n");
         return 1;
     }
     ActionRouter router;
