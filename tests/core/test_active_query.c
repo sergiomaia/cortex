@@ -1,6 +1,7 @@
 #include "../test_assert.h"
 #include "../../core/active_record.h"
 #include "../../core/active_query.h"
+#include <stdlib.h>
 
 void test_active_query_where_filters_by_name(void) {
     ActiveRecordStore store;

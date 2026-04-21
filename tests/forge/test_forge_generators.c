@@ -134,12 +134,15 @@ static int write_file_from_string(const char *path, const char *content) {
  
  void test_forge_generate_controller_creates_file(void) {
      const char *name = "incident";
-     const char *path = "app/controllers/incident_controller.c";
+    const char *path = "app/controllers/incidents_controller.c";
  
      remove_if_exists(path);
  
      ASSERT_EQ(forge_generate_controller(name), 0);
      ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "incidents_controller_handle"));
+
+    remove_if_exists(path);
  }
  
  /* Controller generator: users -> app/controllers/users_controller.c with function stub. */
@@ -165,7 +168,98 @@ static int write_file_from_string(const char *path, const char *content) {
  
      ASSERT_EQ(forge_generate_model(name), 0);
      ASSERT_TRUE(file_exists(path));
+
+    remove_if_exists(path);
+}
+
+void test_forge_generate_model_plural_input_creates_singular_model(void) {
+    const char *name = "Incidents";
+    const char *path = "app/models/incident.c";
+    const char *wrong_path = "app/models/incidents.c";
+
+    remove_if_exists(path);
+    remove_if_exists(wrong_path);
+
+    ASSERT_EQ(forge_generate_model(name), 0);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(!file_exists(wrong_path));
+
+    remove_if_exists(path);
  }
+
+void test_forge_generate_resource_creates_controller_and_views(void) {
+    const char *name = "post";
+    const char *controller_path = "app/controllers/posts_controller.c";
+    const char *index_view_path = "app/views/posts/index.html";
+    const char *show_view_path = "app/views/posts/show.html";
+    const char *new_view_path = "app/views/posts/new.html";
+    const char *edit_view_path = "app/views/posts/edit.html";
+    const char *model_path = "app/models/post.c";
+
+    remove_if_exists(controller_path);
+    remove_if_exists(index_view_path);
+    remove_if_exists(show_view_path);
+    remove_if_exists(new_view_path);
+    remove_if_exists(edit_view_path);
+    remove_if_exists(model_path);
+
+    ASSERT_EQ(forge_generate_resource(name), 0);
+    ASSERT_TRUE(file_exists(controller_path));
+    ASSERT_TRUE(file_exists(index_view_path));
+    ASSERT_TRUE(file_exists(show_view_path));
+    ASSERT_TRUE(file_exists(new_view_path));
+    ASSERT_TRUE(file_exists(edit_view_path));
+    ASSERT_TRUE(!file_exists(model_path));
+
+    remove_if_exists(controller_path);
+    remove_if_exists(index_view_path);
+    remove_if_exists(show_view_path);
+    remove_if_exists(new_view_path);
+    remove_if_exists(edit_view_path);
+}
+
+void test_forge_generate_resource_plural_input_keeps_rails_naming(void) {
+   const char *name = "Pages";
+   const char *controller_path = "app/controllers/pages_controller.c";
+   const char *index_view_path = "app/views/pages/index.html";
+   const char *wrong_controller_path = "app/controllers/pagess_controller.c";
+   const char *wrong_view_dir_index_path = "app/views/pagess/index.html";
+   const char *model_path = "app/models/page.c";
+   const char *wrong_model_path = "app/models/pages.c";
+
+   remove_if_exists(controller_path);
+   remove_if_exists(index_view_path);
+   remove_if_exists(wrong_controller_path);
+   remove_if_exists(wrong_view_dir_index_path);
+   remove_if_exists(model_path);
+   remove_if_exists(wrong_model_path);
+
+   ASSERT_EQ(forge_generate_resource(name), 0);
+   ASSERT_TRUE(file_exists(controller_path));
+   ASSERT_TRUE(file_exists(index_view_path));
+   ASSERT_TRUE(!file_exists(wrong_controller_path));
+   ASSERT_TRUE(!file_exists(wrong_view_dir_index_path));
+   ASSERT_TRUE(!file_exists(model_path));
+   ASSERT_TRUE(!file_exists(wrong_model_path));
+
+   remove_if_exists(controller_path);
+   remove_if_exists(index_view_path);
+   remove_if_exists(wrong_controller_path);
+   remove_if_exists(wrong_view_dir_index_path);
+}
+
+void test_forge_generate_service_creates_service_file(void) {
+    const char *name = "mailer";
+    const char *service_path = "service/mailer.c";
+
+    remove_if_exists(service_path);
+
+    ASSERT_EQ(forge_generate_service(name), 0);
+    ASSERT_TRUE(file_exists(service_path));
+    ASSERT_TRUE(file_contains(service_path, "mailer_service_run"));
+
+    remove_if_exists(service_path);
+}
  
  /* Model generator: user -> app/models/user.c with struct and ActiveRecord. */
  void test_forge_generate_model_user_creates_file_with_fields_and_active_record(void) {
@@ -193,6 +287,23 @@ static int write_file_from_string(const char *path, const char *content) {
  
      ASSERT_EQ(forge_generate_neural_model(name), 0);
      ASSERT_TRUE(file_exists(path));
+
+    remove_if_exists(path);
+}
+
+void test_forge_generate_neural_model_plural_input_creates_singular_file(void) {
+    const char *name = "Incidents";
+    const char *path = "app/neural/incident_neural_model.c";
+    const char *wrong_path = "app/neural/incidents_neural_model.c";
+
+    remove_if_exists(path);
+    remove_if_exists(wrong_path);
+
+    ASSERT_EQ(forge_generate_neural_model(name), 0);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(!file_exists(wrong_path));
+
+    remove_if_exists(path);
  }
 
 /* Scaffold generator: Post title:string email:string body:text published:boolean */
@@ -320,5 +431,35 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     remove_if_exists(react_registry_path);
     remove_if_exists(react_resource_path);
     free(routes_backup);
+}
+
+void test_forge_scaffold_plural_input_uses_plural_controller_and_singular_model(void) {
+    const char *attrs[] = {"title:string"};
+    const int attr_count = 1;
+    const char *model_path = "app/models/page.c";
+    const char *controller_path = "app/controllers/pages_controller.c";
+    const char *view_index_path = "app/views/pages/index.html";
+    const char *wrong_model_path = "app/models/pages.c";
+    const char *wrong_controller_path = "app/controllers/pagess_controller.c";
+    const char *wrong_view_path = "app/views/pagess/index.html";
+
+    remove_if_exists(model_path);
+    remove_if_exists(controller_path);
+    remove_if_exists(view_index_path);
+    remove_if_exists(wrong_model_path);
+    remove_if_exists(wrong_controller_path);
+    remove_if_exists(wrong_view_path);
+
+    ASSERT_EQ(forge_generate_scaffold("Pages", attr_count, attrs, 0), 0);
+    ASSERT_TRUE(file_exists(model_path));
+    ASSERT_TRUE(file_exists(controller_path));
+    ASSERT_TRUE(file_exists(view_index_path));
+    ASSERT_TRUE(!file_exists(wrong_model_path));
+    ASSERT_TRUE(!file_exists(wrong_controller_path));
+    ASSERT_TRUE(!file_exists(wrong_view_path));
+
+    remove_if_exists(model_path);
+    remove_if_exists(controller_path);
+    remove_if_exists(view_index_path);
 }
  

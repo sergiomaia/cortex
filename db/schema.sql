@@ -4,6 +4,13 @@ CREATE TABLE cortex_sql_migrations (
   name TEXT PRIMARY KEY NOT NULL
 );
 
+CREATE TABLE pages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT,
+  created_at DATETIME,
+  updated_at DATETIME
+);
+
 CREATE TABLE schema_migrations (
   version INTEGER PRIMARY KEY NOT NULL
 );

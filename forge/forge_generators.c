@@ -65,6 +65,11 @@ static void forge_str_free(ForgeStrBuf *b) {
 }
 
 static void str_to_lower(const char *in, char *out, size_t out_size);
+static int normalize_resource_names(const char *input,
+                                    char *resource_singular,
+                                    size_t singular_size,
+                                    char *resource_plural,
+                                    size_t plural_size);
 static int parse_attribute_key(const char *attr, char *out, size_t out_size);
 static int parse_attribute_type(const char *attr, char *out, size_t out_size);
 
@@ -1153,13 +1158,18 @@ static int forge_emit_scaffold_controller_react(ForgeStrBuf *b,
  }
  
  int forge_generate_controller(const char *name) {
+    char resource[64];
+    char resource_plural[64];
      char path[256];
      char buffer[512];
  
+    if (!name || name[0] == '\0') return -1;
+    if (normalize_resource_names(name, resource, sizeof(resource), resource_plural, sizeof(resource_plural)) != 0) return -1;
+
      if (ensure_dir("app") != 0) return -1;
      if (ensure_dir("app/controllers") != 0) return -1;
  
-     if (snprintf(path, sizeof(path), "app/controllers/%s_controller.c", name) < 0) {
+    if (snprintf(path, sizeof(path), "app/controllers/%s_controller.c", resource_plural) < 0) {
          return -1;
      }
  
@@ -1171,13 +1181,89 @@ static int forge_emit_scaffold_controller_react(ForgeStrBuf *b,
                   "    (void)req;\n"
                   "    action_controller_render_text(res, 200, \"ok\");\n"
                   "}\n",
-                  name, name) < 0) {
+                 resource_plural, resource_plural) < 0) {
          return -1;
      }
  
      return write_template_file(path, buffer);
  }
  
+int forge_generate_resource(const char *name) {
+    char resource[64];
+    char resource_plural[64];
+    char path[256];
+    char controller_buf[2048];
+
+    if (!name || name[0] == '\0') return -1;
+    if (normalize_resource_names(name, resource, sizeof(resource), resource_plural, sizeof(resource_plural)) != 0) return -1;
+
+    if (ensure_dir("app") != 0) return -1;
+    if (ensure_dir("app/controllers") != 0) return -1;
+    if (ensure_dir("app/views") != 0) return -1;
+    if (snprintf(path, sizeof(path), "app/views/%s", resource_plural) < 0) return -1;
+    if (ensure_dir(path) != 0) return -1;
+
+    if (snprintf(path, sizeof(path), "app/controllers/%s_controller.c", resource_plural) < 0) {
+        return -1;
+    }
+    if (snprintf(controller_buf, sizeof(controller_buf),
+                 "/* Auto-generated resource controller: %s */\n"
+                 "#include \"action/action_controller.h\"\n\n"
+                 "void %s_index(ActionRequest *req, ActionResponse *res) {\n"
+                 "    (void)req;\n"
+                 "    action_controller_render_text(res, 200, \"%s index\");\n"
+                 "}\n\n"
+                 "void %s_show(ActionRequest *req, ActionResponse *res) {\n"
+                 "    (void)req;\n"
+                 "    action_controller_render_text(res, 200, \"%s show\");\n"
+                 "}\n\n"
+                 "void %s_new(ActionRequest *req, ActionResponse *res) {\n"
+                 "    (void)req;\n"
+                 "    action_controller_render_text(res, 200, \"%s new\");\n"
+                 "}\n\n"
+                 "void %s_edit(ActionRequest *req, ActionResponse *res) {\n"
+                 "    (void)req;\n"
+                 "    action_controller_render_text(res, 200, \"%s edit\");\n"
+                 "}\n\n"
+                 "void %s_create(ActionRequest *req, ActionResponse *res) {\n"
+                 "    (void)req;\n"
+                 "    action_controller_render_text(res, 200, \"%s create\");\n"
+                 "}\n\n"
+                 "void %s_update(ActionRequest *req, ActionResponse *res) {\n"
+                 "    (void)req;\n"
+                 "    action_controller_render_text(res, 200, \"%s update\");\n"
+                 "}\n\n"
+                 "void %s_delete(ActionRequest *req, ActionResponse *res) {\n"
+                 "    (void)req;\n"
+                 "    action_controller_render_text(res, 200, \"%s delete\");\n"
+                 "}\n",
+                 resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural) < 0) {
+        return -1;
+    }
+    if (write_template_file(path, controller_buf) != 0) return -1;
+
+    if (snprintf(path, sizeof(path), "app/views/%s/index.html", resource_plural) < 0) return -1;
+    if (write_template_file(path, "<h1>Index</h1>\n<p>List all records here.</p>\n") != 0) return -1;
+
+    if (snprintf(path, sizeof(path), "app/views/%s/show.html", resource_plural) < 0) return -1;
+    if (write_template_file(path, "<h1>Show</h1>\n<p>Display one record here.</p>\n") != 0) return -1;
+
+    if (snprintf(path, sizeof(path), "app/views/%s/new.html", resource_plural) < 0) return -1;
+    if (write_template_file(path, "<h1>New</h1>\n<form method=\"POST\" action=\"\">\n  <button type=\"submit\">Create</button>\n</form>\n") != 0) return -1;
+
+    if (snprintf(path, sizeof(path), "app/views/%s/edit.html", resource_plural) < 0) return -1;
+    if (write_template_file(path, "<h1>Edit</h1>\n<form method=\"POST\" action=\"\">\n  <input type=\"hidden\" name=\"_method\" value=\"PUT\" />\n  <button type=\"submit\">Update</button>\n</form>\n") != 0) return -1;
+
+    return 0;
+}
+
  /* Copy name and capitalize first letter for type name (e.g. user -> User). */
  static void model_type_name(const char *name, char *type_buf, size_t type_size) {
      if (!name || !type_buf || type_size == 0) return;
@@ -1200,21 +1286,24 @@ static int forge_emit_scaffold_controller_react(ForgeStrBuf *b,
  }
  
  int forge_generate_model(const char *name) {
+    char resource[64];
+    char resource_plural[64];
      char path[256];
      char type_name[64];
      char macro_name[64];
      char buffer[768];
  
      if (!name || name[0] == '\0') return -1;
+    if (normalize_resource_names(name, resource, sizeof(resource), resource_plural, sizeof(resource_plural)) != 0) return -1;
      if (ensure_dir("app") != 0) return -1;
      if (ensure_dir("app/models") != 0) return -1;
  
-     if (snprintf(path, sizeof(path), "app/models/%s.c", name) < 0) {
+    if (snprintf(path, sizeof(path), "app/models/%s.c", resource) < 0) {
          return -1;
      }
  
-     model_type_name(name, type_name, sizeof(type_name));
-     model_macro_name(name, macro_name, sizeof(macro_name));
+    model_type_name(resource, type_name, sizeof(type_name));
+    model_macro_name(resource, macro_name, sizeof(macro_name));
  
      /* Struct (typedef ActiveModel), model name constant, ActiveRecord create. */
      if (snprintf(buffer, sizeof(buffer),
@@ -1227,21 +1316,45 @@ static int forge_emit_scaffold_controller_react(ForgeStrBuf *b,
                   "%s *%s_create(ActiveRecordStore *store) {\n"
                   "    return active_record_create(store, %s_MODEL_NAME);\n"
                   "}\n",
-                  name, macro_name, name, type_name, type_name, name, macro_name) < 0) {
+                 resource, macro_name, resource, type_name, type_name, resource, macro_name) < 0) {
          return -1;
      }
  
      return write_template_file(path, buffer);
  }
+
+int forge_generate_service(const char *name) {
+    char path[256];
+    char buffer[512];
+
+    if (!name || name[0] == '\0') return -1;
+    if (ensure_dir("service") != 0) return -1;
+    if (snprintf(path, sizeof(path), "service/%s.c", name) < 0) return -1;
+    if (snprintf(buffer, sizeof(buffer),
+                 "/* Auto-generated service: %s */\n"
+                 "#include <stdio.h>\n\n"
+                 "void %s_service_run(void) {\n"
+                 "    /* TODO: implement %s service behavior. */\n"
+                 "    (void)printf(\"%s service running\\n\");\n"
+                 "}\n",
+                 name, name, name, name) < 0) {
+        return -1;
+    }
+    return write_template_file(path, buffer);
+}
  
  int forge_generate_neural_model(const char *name) {
+    char resource[64];
+    char resource_plural[64];
      char path[256];
      char buffer[512];
  
+    if (!name || name[0] == '\0') return -1;
+    if (normalize_resource_names(name, resource, sizeof(resource), resource_plural, sizeof(resource_plural)) != 0) return -1;
      if (ensure_dir("app") != 0) return -1;
      if (ensure_dir("app/neural") != 0) return -1;
  
-     if (snprintf(path, sizeof(path), "app/neural/%s_neural_model.c", name) < 0) {
+    if (snprintf(path, sizeof(path), "app/neural/%s_neural_model.c", resource) < 0) {
          return -1;
      }
  
@@ -1250,7 +1363,7 @@ static int forge_emit_scaffold_controller_react(ForgeStrBuf *b,
                   "/* Auto‑generated neural model: %s */\n"
                   "#include \"core/neural_model.h\"\n\n"
                   "/* TODO: configure neural model for %s. */\n",
-                  name, name) < 0) {
+                  resource, resource) < 0) {
          return -1;
      }
 
@@ -1321,6 +1434,58 @@ static void str_to_lower(const char *in, char *out, size_t out_size) {
         out[i] = (char)tolower((unsigned char)in[i]);
     }
     out[i] = '\0';
+}
+
+static int normalize_resource_names(const char *input,
+                                    char *resource_singular,
+                                    size_t singular_size,
+                                    char *resource_plural,
+                                    size_t plural_size) {
+    size_t len;
+    int add_es = 0;
+
+    if (!input || !resource_singular || !resource_plural || singular_size == 0 || plural_size == 0) {
+        return -1;
+    }
+
+    str_to_lower(input, resource_singular, singular_size);
+    len = strlen(resource_singular);
+    if (len == 0) {
+        return -1;
+    }
+
+    if (len > 4 && strcmp(resource_singular + len - 4, "sses") == 0) {
+        resource_singular[len - 2] = '\0';
+    } else if (len > 1 && resource_singular[len - 1] == 's' && resource_singular[len - 2] != 's') {
+        resource_singular[len - 1] = '\0';
+    }
+
+    len = strlen(resource_singular);
+    if (len == 0) {
+        return -1;
+    }
+
+    if (len > 1 && resource_singular[len - 1] == 'y') {
+        char before_y = resource_singular[len - 2];
+        int vowel_before_y = (before_y == 'a' || before_y == 'e' || before_y == 'i' || before_y == 'o' || before_y == 'u');
+        if (!vowel_before_y) {
+            if (snprintf(resource_plural, plural_size, "%.*sies", (int)(len - 1), resource_singular) < 0) return -1;
+            return 0;
+        }
+    }
+
+    if (resource_singular[len - 1] == 's' ||
+        resource_singular[len - 1] == 'x' ||
+        resource_singular[len - 1] == 'z' ||
+        (len > 1 && resource_singular[len - 2] == 'c' && resource_singular[len - 1] == 'h') ||
+        (len > 1 && resource_singular[len - 2] == 's' && resource_singular[len - 1] == 'h')) {
+        add_es = 1;
+    }
+
+    if (snprintf(resource_plural, plural_size, "%s%s", resource_singular, add_es ? "es" : "s") < 0) {
+        return -1;
+    }
+    return 0;
 }
 
 /* Extract attribute key from "name:type" into out buffer. */
@@ -1908,9 +2073,7 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
     if (attr_count < 0) return -1;
     if (attr_count > 0 && !attributes) return -1;
 
-    str_to_lower(resource_name, resource, sizeof(resource));
-    if (resource[0] == '\0') return -1;
-    if (snprintf(resource_plural, sizeof(resource_plural), "%ss", resource) < 0) return -1;
+    if (normalize_resource_names(resource_name, resource, sizeof(resource), resource_plural, sizeof(resource_plural)) != 0) return -1;
     model_type_name(resource, type_name, sizeof(type_name));
     model_macro_name(resource, macro_name, sizeof(macro_name));
 
@@ -2134,14 +2297,27 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
     if (snprintf(routes_buf, sizeof(routes_buf),
                  "#include \"config/routes.h\"\n"
                  "#include \"../action/action_request.h\"\n"
-                 "#include \"../action/action_response.h\"\n\n"
-                 "void %s_index(ActionRequest *req, ActionResponse *res);\n"
-                 "void %s_show(ActionRequest *req, ActionResponse *res);\n"
-                 "void %s_new(ActionRequest *req, ActionResponse *res);\n"
-                 "void %s_edit(ActionRequest *req, ActionResponse *res);\n"
-                 "void %s_create(ActionRequest *req, ActionResponse *res);\n"
-                 "void %s_update(ActionRequest *req, ActionResponse *res);\n"
-                 "void %s_delete(ActionRequest *req, ActionResponse *res);\n\n"
+                 "#include \"../action/action_response.h\"\n"
+                 "#include \"../action/action_controller.h\"\n\n"
+                 "int route_get(ActionRouter *router, const char *path, ActionHandler handler) {\n"
+                 "    return action_router_add_route(router, \"GET\", path, handler);\n"
+                 "}\n\n"
+                 "int route_post(ActionRouter *router, const char *path, ActionHandler handler) {\n"
+                 "    return action_router_add_route(router, \"POST\", path, handler);\n"
+                 "}\n\n"
+                 "int route_put(ActionRouter *router, const char *path, ActionHandler handler) {\n"
+                 "    return action_router_add_route(router, \"PUT\", path, handler);\n"
+                 "}\n\n"
+                 "int route_delete(ActionRouter *router, const char *path, ActionHandler handler) {\n"
+                 "    return action_router_add_route(router, \"DELETE\", path, handler);\n"
+                 "}\n\n"
+                 "__attribute__((weak)) void %s_index(ActionRequest *req, ActionResponse *res) { (void)req; action_controller_render_text(res, 500, \"Missing controller handler: %s_index\"); }\n"
+                 "__attribute__((weak)) void %s_show(ActionRequest *req, ActionResponse *res) { (void)req; action_controller_render_text(res, 500, \"Missing controller handler: %s_show\"); }\n"
+                 "__attribute__((weak)) void %s_new(ActionRequest *req, ActionResponse *res) { (void)req; action_controller_render_text(res, 500, \"Missing controller handler: %s_new\"); }\n"
+                 "__attribute__((weak)) void %s_edit(ActionRequest *req, ActionResponse *res) { (void)req; action_controller_render_text(res, 500, \"Missing controller handler: %s_edit\"); }\n"
+                 "__attribute__((weak)) void %s_create(ActionRequest *req, ActionResponse *res) { (void)req; action_controller_render_text(res, 500, \"Missing controller handler: %s_create\"); }\n"
+                 "__attribute__((weak)) void %s_update(ActionRequest *req, ActionResponse *res) { (void)req; action_controller_render_text(res, 500, \"Missing controller handler: %s_update\"); }\n"
+                 "__attribute__((weak)) void %s_delete(ActionRequest *req, ActionResponse *res) { (void)req; action_controller_render_text(res, 500, \"Missing controller handler: %s_delete\"); }\n"
                  "void home_index(ActionRequest *req, ActionResponse *res);\n\n"
                  "void app_register_routes(ActionRouter *router) {\n"
                  "    if (!router) return;\n"
@@ -2156,8 +2332,18 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
                  "    route_post(router, \"/%s/:id\", %s_update);\n"
                  "    route_put(router, \"/%s/:id\", %s_update);\n"
                  "    route_delete(router, \"/%s/:id\", %s_delete);\n"
+                 "}\n\n"
+                 "void register_routes(ActionRouter *router) {\n"
+                 "    app_register_routes(router);\n"
                  "}\n",
-                 resource_plural, resource_plural, resource_plural, resource_plural, resource_plural, resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
+                 resource_plural, resource_plural,
                  resource_plural, resource_plural,
                  resource_plural, resource_plural,
                  resource_plural, resource_plural,
@@ -2228,10 +2414,25 @@ int forge_new_project(const char *project_name) {
         "#include \"config/routes.h\"\n"
         "#include \"../action/action_request.h\"\n"
         "#include \"../action/action_response.h\"\n\n"
+        "int route_get(ActionRouter *router, const char *path, ActionHandler handler) {\n"
+        "    return action_router_add_route(router, \"GET\", path, handler);\n"
+        "}\n\n"
+        "int route_post(ActionRouter *router, const char *path, ActionHandler handler) {\n"
+        "    return action_router_add_route(router, \"POST\", path, handler);\n"
+        "}\n\n"
+        "int route_put(ActionRouter *router, const char *path, ActionHandler handler) {\n"
+        "    return action_router_add_route(router, \"PUT\", path, handler);\n"
+        "}\n\n"
+        "int route_delete(ActionRouter *router, const char *path, ActionHandler handler) {\n"
+        "    return action_router_add_route(router, \"DELETE\", path, handler);\n"
+        "}\n\n"
         "void home_index(ActionRequest *req, ActionResponse *res);\n\n"
         "void app_register_routes(ActionRouter *router) {\n"
         "    if (!router) return;\n"
         "    route_get(router, \"/\", home_index);\n"
+        "}\n\n"
+        "void register_routes(ActionRouter *router) {\n"
+        "    app_register_routes(router);\n"
         "}\n";
     const char *home_controller_content =
         "#include \"action_controller.h\"\n"
