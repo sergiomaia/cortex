@@ -7,6 +7,14 @@
   *   - app/controllers/<name>_controller.c
   *   - app/models/<name>.c (struct + ActiveRecord integration)
   *   - app/neural/<name>_neural_model.c
+ *   - app/neural/prompts/<name>_prompt.c
+ *   - app/neural/agents/<name>_agent.c
+ *   - app/neural/rag/<name>_rag.c
+ *   - app/neural/streams/<name>_stream.c
+ *   - app/neural/memory/<name>_memory.c
+ *   - app/neural/retrievers/<name>_retriever.c
+ *   - app/neural/integrations/<name>_integration.c
+ *   - app/neural/policies/<name>_policy.c
  *   - app/routes.c (scaffold route registration helper)
   *
   * All functions return 0 on success, non‑zero on error.
@@ -17,6 +25,14 @@ int forge_generate_resource(const char *name);
  int forge_generate_model(const char *name);
 int forge_generate_service(const char *name);
  int forge_generate_neural_model(const char *name);
+int forge_generate_neural_prompt(const char *name);
+int forge_generate_neural_agent(const char *name);
+int forge_generate_neural_rag(const char *name);
+int forge_generate_neural_stream(const char *name);
+int forge_generate_neural_memory(const char *name);
+int forge_generate_neural_retriever(const char *name);
+int forge_generate_neural_integration(const char *name);
+int forge_generate_neural_policy(const char *name);
 int forge_generate_stimulus_controller(const char *name);
  
 /* Generate a Rails-like scaffold for a resource.

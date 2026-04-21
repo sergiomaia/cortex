@@ -152,6 +152,114 @@ void test_cli_parse_generate_service_command(void) {
     free_argv(argv, argc);
 }
 
+void test_cli_parse_generate_neural_model_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "generate", "neural:model", "incident", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_NEURAL_MODEL);
+    ASSERT_STR_EQ(parsed.name, "incident");
+
+    free_argv(argv, argc);
+}
+
+void test_cli_parse_generate_neural_prompt_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "generate", "neural:prompt", "incident", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_NEURAL_PROMPT);
+    ASSERT_STR_EQ(parsed.name, "incident");
+
+    free_argv(argv, argc);
+}
+
+void test_cli_parse_generate_neural_agent_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "generate", "neural:agent", "incident", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_NEURAL_AGENT);
+    ASSERT_STR_EQ(parsed.name, "incident");
+
+    free_argv(argv, argc);
+}
+
+void test_cli_parse_generate_neural_rag_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "generate", "neural:rag", "incident", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_NEURAL_RAG);
+    ASSERT_STR_EQ(parsed.name, "incident");
+
+    free_argv(argv, argc);
+}
+
+void test_cli_parse_generate_neural_stream_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "generate", "neural:stream", "incident", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_NEURAL_STREAM);
+    ASSERT_STR_EQ(parsed.name, "incident");
+
+    free_argv(argv, argc);
+}
+
+void test_cli_parse_generate_neural_memory_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "generate", "neural:memory", "incident", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_NEURAL_MEMORY);
+    ASSERT_STR_EQ(parsed.name, "incident");
+
+    free_argv(argv, argc);
+}
+
+void test_cli_parse_generate_neural_retriever_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "generate", "neural:retriever", "incident", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_NEURAL_RETRIEVER);
+    ASSERT_STR_EQ(parsed.name, "incident");
+
+    free_argv(argv, argc);
+}
+
+void test_cli_parse_generate_neural_integration_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "generate", "neural:integration", "openai", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_NEURAL_INTEGRATION);
+    ASSERT_STR_EQ(parsed.name, "openai");
+
+    free_argv(argv, argc);
+}
+
+void test_cli_parse_generate_neural_policy_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "generate", "neural:policy", "incident", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_NEURAL_POLICY);
+    ASSERT_STR_EQ(parsed.name, "incident");
+
+    free_argv(argv, argc);
+}
+
 void test_cli_parse_db_migrate_command(void) {
     int argc;
     char **argv = make_argv("cortex", "db:migrate", NULL, NULL, &argc);
@@ -424,6 +532,141 @@ void test_cli_dispatch_generate_service_executes_handler(void) {
 
     parsed.command = CLI_COMMAND_GENERATE_SERVICE;
     parsed.name = "mailer";
+
+    ASSERT_EQ(cli_dispatch(&parsed), 0);
+    ASSERT_TRUE(file_exists(path));
+
+    remove_if_exists(path);
+}
+
+void test_cli_dispatch_generate_neural_model_executes_handler(void) {
+    const char *path = "app/neural/incident_neural_model.c";
+    CliParsed parsed;
+
+    remove_if_exists(path);
+
+    parsed.command = CLI_COMMAND_GENERATE_NEURAL_MODEL;
+    parsed.name = "incident";
+
+    ASSERT_EQ(cli_dispatch(&parsed), 0);
+    ASSERT_TRUE(file_exists(path));
+
+    remove_if_exists(path);
+}
+
+void test_cli_dispatch_generate_neural_prompt_executes_handler(void) {
+    const char *path = "app/neural/prompts/incident_prompt.c";
+    CliParsed parsed;
+
+    remove_if_exists(path);
+
+    parsed.command = CLI_COMMAND_GENERATE_NEURAL_PROMPT;
+    parsed.name = "incident";
+
+    ASSERT_EQ(cli_dispatch(&parsed), 0);
+    ASSERT_TRUE(file_exists(path));
+
+    remove_if_exists(path);
+}
+
+void test_cli_dispatch_generate_neural_agent_executes_handler(void) {
+    const char *path = "app/neural/agents/incident_agent.c";
+    CliParsed parsed;
+
+    remove_if_exists(path);
+
+    parsed.command = CLI_COMMAND_GENERATE_NEURAL_AGENT;
+    parsed.name = "incident";
+
+    ASSERT_EQ(cli_dispatch(&parsed), 0);
+    ASSERT_TRUE(file_exists(path));
+
+    remove_if_exists(path);
+}
+
+void test_cli_dispatch_generate_neural_rag_executes_handler(void) {
+    const char *path = "app/neural/rag/incident_rag.c";
+    CliParsed parsed;
+
+    remove_if_exists(path);
+
+    parsed.command = CLI_COMMAND_GENERATE_NEURAL_RAG;
+    parsed.name = "incident";
+
+    ASSERT_EQ(cli_dispatch(&parsed), 0);
+    ASSERT_TRUE(file_exists(path));
+
+    remove_if_exists(path);
+}
+
+void test_cli_dispatch_generate_neural_stream_executes_handler(void) {
+    const char *path = "app/neural/streams/incident_stream.c";
+    CliParsed parsed;
+
+    remove_if_exists(path);
+
+    parsed.command = CLI_COMMAND_GENERATE_NEURAL_STREAM;
+    parsed.name = "incident";
+
+    ASSERT_EQ(cli_dispatch(&parsed), 0);
+    ASSERT_TRUE(file_exists(path));
+
+    remove_if_exists(path);
+}
+
+void test_cli_dispatch_generate_neural_memory_executes_handler(void) {
+    const char *path = "app/neural/memory/incident_memory.c";
+    CliParsed parsed;
+
+    remove_if_exists(path);
+
+    parsed.command = CLI_COMMAND_GENERATE_NEURAL_MEMORY;
+    parsed.name = "incident";
+
+    ASSERT_EQ(cli_dispatch(&parsed), 0);
+    ASSERT_TRUE(file_exists(path));
+
+    remove_if_exists(path);
+}
+
+void test_cli_dispatch_generate_neural_retriever_executes_handler(void) {
+    const char *path = "app/neural/retrievers/incident_retriever.c";
+    CliParsed parsed;
+
+    remove_if_exists(path);
+
+    parsed.command = CLI_COMMAND_GENERATE_NEURAL_RETRIEVER;
+    parsed.name = "incident";
+
+    ASSERT_EQ(cli_dispatch(&parsed), 0);
+    ASSERT_TRUE(file_exists(path));
+
+    remove_if_exists(path);
+}
+
+void test_cli_dispatch_generate_neural_integration_executes_handler(void) {
+    const char *path = "app/neural/integrations/openai_integration.c";
+    CliParsed parsed;
+
+    remove_if_exists(path);
+
+    parsed.command = CLI_COMMAND_GENERATE_NEURAL_INTEGRATION;
+    parsed.name = "openai";
+
+    ASSERT_EQ(cli_dispatch(&parsed), 0);
+    ASSERT_TRUE(file_exists(path));
+
+    remove_if_exists(path);
+}
+
+void test_cli_dispatch_generate_neural_policy_executes_handler(void) {
+    const char *path = "app/neural/policies/incident_policy.c";
+    CliParsed parsed;
+
+    remove_if_exists(path);
+
+    parsed.command = CLI_COMMAND_GENERATE_NEURAL_POLICY;
+    parsed.name = "incident";
 
     ASSERT_EQ(cli_dispatch(&parsed), 0);
     ASSERT_TRUE(file_exists(path));

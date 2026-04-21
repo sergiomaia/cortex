@@ -204,6 +204,15 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
          *   cortex generate resource <name>              (controller + views)
          *   cortex generate model <name>                 (model only)
          *   cortex generate service <name>               (service only)
+         *   cortex generate neural:model <name>          (neural model starter)
+         *   cortex generate neural:prompt <name>         (prompt module starter)
+         *   cortex generate neural:agent <name>          (agent module starter)
+         *   cortex generate neural:rag <name>            (RAG pipeline starter)
+         *   cortex generate neural:stream <name>         (streaming module starter)
+         *   cortex generate neural:memory <name>         (memory module starter)
+         *   cortex generate neural:retriever <name>      (retrieval module starter)
+         *   cortex generate neural:integration <name>    (provider adapter starter)
+         *   cortex generate neural:policy <name>         (guardrails starter)
          *   cortex generate scaffold <Name> a:b c:d      (scaffold)
          */
         if (argc == 3) {
@@ -232,6 +241,60 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
 
         if (argc == 4 && strcmp(argv[2], "service") == 0) {
             out->command = CLI_COMMAND_GENERATE_SERVICE;
+            out->name = argv[3];
+            return 0;
+        }
+
+        if (argc == 4 && strcmp(argv[2], "neural:model") == 0) {
+            out->command = CLI_COMMAND_GENERATE_NEURAL_MODEL;
+            out->name = argv[3];
+            return 0;
+        }
+
+        if (argc == 4 && strcmp(argv[2], "neural:prompt") == 0) {
+            out->command = CLI_COMMAND_GENERATE_NEURAL_PROMPT;
+            out->name = argv[3];
+            return 0;
+        }
+
+        if (argc == 4 && strcmp(argv[2], "neural:agent") == 0) {
+            out->command = CLI_COMMAND_GENERATE_NEURAL_AGENT;
+            out->name = argv[3];
+            return 0;
+        }
+
+        if (argc == 4 && strcmp(argv[2], "neural:rag") == 0) {
+            out->command = CLI_COMMAND_GENERATE_NEURAL_RAG;
+            out->name = argv[3];
+            return 0;
+        }
+
+        if (argc == 4 && strcmp(argv[2], "neural:stream") == 0) {
+            out->command = CLI_COMMAND_GENERATE_NEURAL_STREAM;
+            out->name = argv[3];
+            return 0;
+        }
+
+        if (argc == 4 && strcmp(argv[2], "neural:memory") == 0) {
+            out->command = CLI_COMMAND_GENERATE_NEURAL_MEMORY;
+            out->name = argv[3];
+            return 0;
+        }
+
+        if (argc == 4 && strcmp(argv[2], "neural:retriever") == 0) {
+            out->command = CLI_COMMAND_GENERATE_NEURAL_RETRIEVER;
+            out->name = argv[3];
+            return 0;
+        }
+
+        if (argc == 4 && strcmp(argv[2], "neural:integration") == 0) {
+            out->command = CLI_COMMAND_GENERATE_NEURAL_INTEGRATION;
+            out->name = argv[3];
+            return 0;
+        }
+
+        if (argc == 4 && strcmp(argv[2], "neural:policy") == 0) {
+            out->command = CLI_COMMAND_GENERATE_NEURAL_POLICY;
             out->name = argv[3];
             return 0;
         }
@@ -437,6 +500,60 @@ static int cli_handle_generate_service(const char *name) {
     return 0;
 }
 
+static int cli_handle_generate_neural_model(const char *name) {
+    if (!name || name[0] == '\0') return -1;
+    printf("generate neural:model: creating '%s'\n", name);
+    return forge_generate_neural_model(name);
+}
+
+static int cli_handle_generate_neural_prompt(const char *name) {
+    if (!name || name[0] == '\0') return -1;
+    printf("generate neural:prompt: creating '%s'\n", name);
+    return forge_generate_neural_prompt(name);
+}
+
+static int cli_handle_generate_neural_agent(const char *name) {
+    if (!name || name[0] == '\0') return -1;
+    printf("generate neural:agent: creating '%s'\n", name);
+    return forge_generate_neural_agent(name);
+}
+
+static int cli_handle_generate_neural_rag(const char *name) {
+    if (!name || name[0] == '\0') return -1;
+    printf("generate neural:rag: creating '%s'\n", name);
+    return forge_generate_neural_rag(name);
+}
+
+static int cli_handle_generate_neural_stream(const char *name) {
+    if (!name || name[0] == '\0') return -1;
+    printf("generate neural:stream: creating '%s'\n", name);
+    return forge_generate_neural_stream(name);
+}
+
+static int cli_handle_generate_neural_memory(const char *name) {
+    if (!name || name[0] == '\0') return -1;
+    printf("generate neural:memory: creating '%s'\n", name);
+    return forge_generate_neural_memory(name);
+}
+
+static int cli_handle_generate_neural_retriever(const char *name) {
+    if (!name || name[0] == '\0') return -1;
+    printf("generate neural:retriever: creating '%s'\n", name);
+    return forge_generate_neural_retriever(name);
+}
+
+static int cli_handle_generate_neural_integration(const char *name) {
+    if (!name || name[0] == '\0') return -1;
+    printf("generate neural:integration: creating '%s'\n", name);
+    return forge_generate_neural_integration(name);
+}
+
+static int cli_handle_generate_neural_policy(const char *name) {
+    if (!name || name[0] == '\0') return -1;
+    printf("generate neural:policy: creating '%s'\n", name);
+    return forge_generate_neural_policy(name);
+}
+
 static int cli_handle_generate_scaffold(const char *name, int attr_count, const char **attributes, int use_react) {
     if (!name || name[0] == '\0') {
         return -1;
@@ -524,6 +641,24 @@ int cli_dispatch(const CliParsed *parsed) {
         return cli_handle_generate_service(parsed->name);
     case CLI_COMMAND_GENERATE_SCAFFOLD:
         return cli_handle_generate_scaffold(parsed->name, parsed->attribute_count, parsed->attributes, parsed->use_react);
+    case CLI_COMMAND_GENERATE_NEURAL_MODEL:
+        return cli_handle_generate_neural_model(parsed->name);
+    case CLI_COMMAND_GENERATE_NEURAL_PROMPT:
+        return cli_handle_generate_neural_prompt(parsed->name);
+    case CLI_COMMAND_GENERATE_NEURAL_AGENT:
+        return cli_handle_generate_neural_agent(parsed->name);
+    case CLI_COMMAND_GENERATE_NEURAL_RAG:
+        return cli_handle_generate_neural_rag(parsed->name);
+    case CLI_COMMAND_GENERATE_NEURAL_STREAM:
+        return cli_handle_generate_neural_stream(parsed->name);
+    case CLI_COMMAND_GENERATE_NEURAL_MEMORY:
+        return cli_handle_generate_neural_memory(parsed->name);
+    case CLI_COMMAND_GENERATE_NEURAL_RETRIEVER:
+        return cli_handle_generate_neural_retriever(parsed->name);
+    case CLI_COMMAND_GENERATE_NEURAL_INTEGRATION:
+        return cli_handle_generate_neural_integration(parsed->name);
+    case CLI_COMMAND_GENERATE_NEURAL_POLICY:
+        return cli_handle_generate_neural_policy(parsed->name);
     case CLI_COMMAND_GENERATE_STIMULUS:
         return cli_handle_generate_stimulus(parsed->name);
     case CLI_COMMAND_DEV:
@@ -552,6 +687,15 @@ int cli_run(int argc, char **argv) {
         fprintf(stderr, "  %s generate resource <name>\n", argv[0]);
         fprintf(stderr, "  %s generate model <name>\n", argv[0]);
         fprintf(stderr, "  %s generate service <name>\n", argv[0]);
+        fprintf(stderr, "  %s generate neural:model <name>\n", argv[0]);
+        fprintf(stderr, "  %s generate neural:prompt <name>\n", argv[0]);
+        fprintf(stderr, "  %s generate neural:agent <name>\n", argv[0]);
+        fprintf(stderr, "  %s generate neural:rag <name>\n", argv[0]);
+        fprintf(stderr, "  %s generate neural:stream <name>\n", argv[0]);
+        fprintf(stderr, "  %s generate neural:memory <name>\n", argv[0]);
+        fprintf(stderr, "  %s generate neural:retriever <name>\n", argv[0]);
+        fprintf(stderr, "  %s generate neural:integration <name>\n", argv[0]);
+        fprintf(stderr, "  %s generate neural:policy <name>\n", argv[0]);
         fprintf(stderr, "  %s generate stimulus <name>\n", argv[0]);
         fprintf(stderr, "  %s generate scaffold <Name> field:type field:type [--react|--no-react]\n", argv[0]);
         fprintf(stderr, "  %s assets:build\n", argv[0]);

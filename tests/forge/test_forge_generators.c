@@ -377,6 +377,118 @@ void test_forge_generate_neural_model_plural_input_creates_singular_file(void) {
     remove_if_exists(path);
  }
 
+void test_forge_generate_neural_prompt_creates_file(void) {
+    const char *name = "incident";
+    const char *path = "app/neural/prompts/incident_prompt.c";
+
+    remove_if_exists(path);
+
+    ASSERT_EQ(forge_generate_neural_prompt(name), 0);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "incident_prompt_template"));
+    ASSERT_TRUE(file_contains(path, "neural_prompt_render"));
+
+    remove_if_exists(path);
+}
+
+void test_forge_generate_neural_agent_creates_file(void) {
+    const char *name = "incident";
+    const char *path = "app/neural/agents/incident_agent.c";
+
+    remove_if_exists(path);
+
+    ASSERT_EQ(forge_generate_neural_agent(name), 0);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "incident_agent_bootstrap"));
+    ASSERT_TRUE(file_contains(path, "neural_agent_register_tool"));
+
+    remove_if_exists(path);
+}
+
+void test_forge_generate_neural_rag_creates_file(void) {
+    const char *name = "incident";
+    const char *path = "app/neural/rag/incident_rag.c";
+
+    remove_if_exists(path);
+
+    ASSERT_EQ(forge_generate_neural_rag(name), 0);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "incident_rag_ask"));
+    ASSERT_TRUE(file_contains(path, "rag_engine_query"));
+
+    remove_if_exists(path);
+}
+
+void test_forge_generate_neural_stream_creates_file(void) {
+    const char *name = "incident";
+    const char *path = "app/neural/streams/incident_stream.c";
+
+    remove_if_exists(path);
+
+    ASSERT_EQ(forge_generate_neural_stream(name), 0);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "incident_stream_run"));
+    ASSERT_TRUE(file_contains(path, "neural_stream_run"));
+
+    remove_if_exists(path);
+}
+
+void test_forge_generate_neural_memory_creates_file(void) {
+    const char *name = "incident";
+    const char *path = "app/neural/memory/incident_memory.c";
+
+    remove_if_exists(path);
+
+    ASSERT_EQ(forge_generate_neural_memory(name), 0);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "incident_memory_recall"));
+    ASSERT_TRUE(file_contains(path, "neural_memory_store"));
+
+    remove_if_exists(path);
+}
+
+void test_forge_generate_neural_retriever_creates_file(void) {
+    const char *name = "incident";
+    const char *path = "app/neural/retrievers/incident_retriever.c";
+
+    remove_if_exists(path);
+
+    ASSERT_EQ(forge_generate_neural_retriever(name), 0);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "incident_retriever_search"));
+    ASSERT_TRUE(file_contains(path, "neural_retrieval_search"));
+
+    remove_if_exists(path);
+}
+
+void test_forge_generate_neural_integration_creates_file(void) {
+    const char *name = "openai";
+    const char *path = "app/neural/integrations/openai_integration.c";
+
+    remove_if_exists(path);
+
+    ASSERT_EQ(forge_generate_neural_integration(name), 0);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "openai_integration_run"));
+    ASSERT_TRUE(file_contains(path, "llm_integration_run"));
+
+    remove_if_exists(path);
+}
+
+void test_forge_generate_neural_policy_creates_file(void) {
+    const char *name = "incident";
+    const char *path = "app/neural/policies/incident_policy.c";
+
+    remove_if_exists(path);
+
+    ASSERT_EQ(forge_generate_neural_policy(name), 0);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "incident_policy_allow_prompt"));
+    ASSERT_TRUE(file_contains(path, "incident_policy_max_tokens"));
+
+    remove_if_exists(path);
+}
+
 /* Scaffold generator: Post title:string email:string body:text published:boolean */
 void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) {
     const char *attrs[] = {"title:string", "email:string", "body:text", "published:boolean"};

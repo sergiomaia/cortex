@@ -1343,31 +1343,347 @@ int forge_generate_service(const char *name) {
     return write_template_file(path, buffer);
 }
  
- int forge_generate_neural_model(const char *name) {
-    char resource[64];
+static int forge_neural_resource_name(const char *name, char *resource, size_t resource_size) {
     char resource_plural[64];
-     char path[256];
-     char buffer[512];
- 
-    if (!name || name[0] == '\0') return -1;
-    if (normalize_resource_names(name, resource, sizeof(resource), resource_plural, sizeof(resource_plural)) != 0) return -1;
-     if (ensure_dir("app") != 0) return -1;
-     if (ensure_dir("app/neural") != 0) return -1;
- 
-    if (snprintf(path, sizeof(path), "app/neural/%s_neural_model.c", resource) < 0) {
-         return -1;
-     }
- 
-    /* Minimal neural model template. */
-    if (snprintf(buffer, sizeof(buffer),
-                  "/* Auto‑generated neural model: %s */\n"
-                  "#include \"core/neural_model.h\"\n\n"
-                  "/* TODO: configure neural model for %s. */\n",
-                  resource, resource) < 0) {
-         return -1;
-     }
+    if (!name || !resource || resource_size == 0) return -1;
+    if (normalize_resource_names(name, resource, resource_size, resource_plural, sizeof(resource_plural)) != 0) return -1;
+    return 0;
+}
 
-     return write_template_file(path, buffer);
+int forge_generate_neural_model(const char *name) {
+    char resource[64];
+    char path[256];
+    char buffer[2048];
+
+    if (forge_neural_resource_name(name, resource, sizeof(resource)) != 0) return -1;
+    if (ensure_dir("app") != 0) return -1;
+    if (ensure_dir("app/neural") != 0) return -1;
+    if (snprintf(path, sizeof(path), "app/neural/%s_neural_model.c", resource) < 0) return -1;
+
+    if (snprintf(buffer, sizeof(buffer),
+                 "/* Auto-generated neural model: %s */\n"
+                 "#include \"core/neural_model.h\"\n\n"
+                 "static const char *%s_system_prompt =\n"
+                 "    \"You are an assistant focused on %s operations.\";\n\n"
+                 "const char *%s_neural_system_prompt(void) {\n"
+                 "    return %s_system_prompt;\n"
+                 "}\n\n"
+                 "void %s_neural_enrich(NeuralModel *model) {\n"
+                 "    (void)model;\n"
+                 "    /* TODO: configure provider/model settings. */\n"
+                 "    /* TODO: enrich context with application data. */\n"
+                 "}\n",
+                 resource,
+                 resource,
+                 resource,
+                 resource,
+                 resource,
+                 resource,
+                 resource,
+                 resource) < 0) {
+        return -1;
+    }
+
+    return write_template_file(path, buffer);
+}
+
+int forge_generate_neural_prompt(const char *name) {
+    char resource[64];
+    char path[256];
+    char buffer[2048];
+
+    if (forge_neural_resource_name(name, resource, sizeof(resource)) != 0) return -1;
+    if (ensure_dir("app") != 0) return -1;
+    if (ensure_dir("app/neural") != 0) return -1;
+    if (ensure_dir("app/neural/prompts") != 0) return -1;
+    if (snprintf(path, sizeof(path), "app/neural/prompts/%s_prompt.c", resource) < 0) return -1;
+
+    if (snprintf(buffer, sizeof(buffer),
+                 "/* Auto-generated neural prompt module: %s */\n"
+                 "#include \"core/neural_prompt.h\"\n\n"
+                 "static const char *%s_prompt_template =\n"
+                 "    \"Task: {{task}}\\n\"\n"
+                 "    \"Input: {{input}}\\n\"\n"
+                 "    \"Context: {{context}}\\n\";\n\n"
+                 "int %s_prompt_build(const NeuralPromptVar *vars,\n"
+                 "                   int var_count,\n"
+                 "                   char *out,\n"
+                 "                   int out_size) {\n"
+                 "    return neural_prompt_render(%s_prompt_template, vars, var_count, out, out_size);\n"
+                 "}\n",
+                 resource,
+                 resource,
+                 resource,
+                 resource) < 0) {
+        return -1;
+    }
+
+    return write_template_file(path, buffer);
+}
+
+int forge_generate_neural_agent(const char *name) {
+    char resource[64];
+    char path[256];
+    char buffer[3072];
+
+    if (forge_neural_resource_name(name, resource, sizeof(resource)) != 0) return -1;
+    if (ensure_dir("app") != 0) return -1;
+    if (ensure_dir("app/neural") != 0) return -1;
+    if (ensure_dir("app/neural/agents") != 0) return -1;
+    if (snprintf(path, sizeof(path), "app/neural/agents/%s_agent.c", resource) < 0) return -1;
+
+    if (snprintf(buffer, sizeof(buffer),
+                 "/* Auto-generated neural agent module: %s */\n"
+                 "#include \"core/neural_agent.h\"\n\n"
+                 "static const char *%s_tool_help(const char *input) {\n"
+                 "    (void)input;\n"
+                 "    return \"help\";\n"
+                 "}\n\n"
+                 "int %s_agent_bootstrap(NeuralAgent *agent) {\n"
+                 "    if (!agent) return -1;\n"
+                 "    neural_agent_init(agent);\n"
+                 "    if (neural_agent_register_tool(agent, \"help\", \"help\", %s_tool_help) != 0) {\n"
+                 "        neural_agent_free(agent);\n"
+                 "        return -1;\n"
+                 "    }\n"
+                 "    return 0;\n"
+                 "}\n\n"
+                 "const char *%s_agent_run(NeuralAgent *agent, const char *input) {\n"
+                 "    return neural_agent_call_tool(agent, input);\n"
+                 "}\n",
+                 resource,
+                 resource,
+                 resource,
+                 resource,
+                 resource) < 0) {
+        return -1;
+    }
+
+    return write_template_file(path, buffer);
+}
+
+int forge_generate_neural_rag(const char *name) {
+    char resource[64];
+    char path[256];
+    char buffer[3072];
+
+    if (forge_neural_resource_name(name, resource, sizeof(resource)) != 0) return -1;
+    if (ensure_dir("app") != 0) return -1;
+    if (ensure_dir("app/neural") != 0) return -1;
+    if (ensure_dir("app/neural/rag") != 0) return -1;
+    if (snprintf(path, sizeof(path), "app/neural/rag/%s_rag.c", resource) < 0) return -1;
+
+    if (snprintf(buffer, sizeof(buffer),
+                 "/* Auto-generated neural RAG module: %s */\n"
+                 "#include \"core/rag_integration.h\"\n\n"
+                 "void %s_rag_init(RAGEngine *engine) {\n"
+                 "    if (!engine) return;\n"
+                 "    rag_engine_init(engine, \"local-mock\");\n"
+                 "}\n\n"
+                 "int %s_rag_seed(RAGEngine *engine, const char *keyword, const char *value) {\n"
+                 "    if (!engine || !keyword || !value) return -1;\n"
+                 "    return rag_engine_store(engine, keyword, value);\n"
+                 "}\n\n"
+                 "int %s_rag_ask(RAGEngine *engine, const char *question, char *out, int out_size) {\n"
+                 "    if (!engine || !question || !out || out_size <= 0) return -1;\n"
+                 "    return rag_engine_query(engine, question, out, out_size);\n"
+                 "}\n",
+                 resource,
+                 resource,
+                 resource,
+                 resource) < 0) {
+        return -1;
+    }
+
+    return write_template_file(path, buffer);
+}
+
+int forge_generate_neural_stream(const char *name) {
+    char resource[64];
+    char path[256];
+    char buffer[3072];
+
+    if (forge_neural_resource_name(name, resource, sizeof(resource)) != 0) return -1;
+    if (ensure_dir("app") != 0) return -1;
+    if (ensure_dir("app/neural") != 0) return -1;
+    if (ensure_dir("app/neural/streams") != 0) return -1;
+    if (snprintf(path, sizeof(path), "app/neural/streams/%s_stream.c", resource) < 0) return -1;
+
+    if (snprintf(buffer, sizeof(buffer),
+                 "/* Auto-generated neural stream module: %s */\n"
+                 "#include \"core/neural_stream.h\"\n\n"
+                 "typedef struct {\n"
+                 "    int tokens;\n"
+                 "} %s_stream_state;\n\n"
+                 "static void %s_stream_on_token(const char *token, int is_last, void *user_data) {\n"
+                 "    %s_stream_state *state = (%s_stream_state *)user_data;\n"
+                 "    (void)token;\n"
+                 "    (void)is_last;\n"
+                 "    if (state) state->tokens += 1;\n"
+                 "}\n\n"
+                 "int %s_stream_run(const char *prompt) {\n"
+                 "    NeuralRuntime runtime;\n"
+                 "    NeuralStream stream;\n"
+                 "    %s_stream_state state;\n"
+                 "    state.tokens = 0;\n"
+                 "    runtime = neural_runtime_init(\"local-mock\");\n"
+                 "    stream = neural_stream_init(runtime);\n"
+                 "    return neural_stream_run(&stream, prompt, %s_stream_on_token, &state);\n"
+                 "}\n",
+                 resource,
+                 resource,
+                 resource,
+                 resource,
+                 resource,
+                 resource,
+                 resource,
+                 resource) < 0) {
+        return -1;
+    }
+
+    return write_template_file(path, buffer);
+}
+
+int forge_generate_neural_memory(const char *name) {
+    char resource[64];
+    char path[256];
+    char buffer[2048];
+
+    if (forge_neural_resource_name(name, resource, sizeof(resource)) != 0) return -1;
+    if (ensure_dir("app") != 0) return -1;
+    if (ensure_dir("app/neural") != 0) return -1;
+    if (ensure_dir("app/neural/memory") != 0) return -1;
+    if (snprintf(path, sizeof(path), "app/neural/memory/%s_memory.c", resource) < 0) return -1;
+
+    if (snprintf(buffer, sizeof(buffer),
+                 "/* Auto-generated neural memory module: %s */\n"
+                 "#include \"core/neural_memory.h\"\n\n"
+                 "int %s_memory_remember(NeuralMemory *memory, const char *key, const char *value) {\n"
+                 "    if (!memory || !key || !value) return -1;\n"
+                 "    return neural_memory_store(memory, key, value);\n"
+                 "}\n\n"
+                 "const char *%s_memory_recall(const NeuralMemory *memory, const char *key) {\n"
+                 "    if (!memory || !key) return NULL;\n"
+                 "    return neural_memory_retrieve(memory, key);\n"
+                 "}\n",
+                 resource,
+                 resource,
+                 resource) < 0) {
+        return -1;
+    }
+
+    return write_template_file(path, buffer);
+}
+
+int forge_generate_neural_retriever(const char *name) {
+    char resource[64];
+    char path[256];
+    char buffer[3072];
+
+    if (forge_neural_resource_name(name, resource, sizeof(resource)) != 0) return -1;
+    if (ensure_dir("app") != 0) return -1;
+    if (ensure_dir("app/neural") != 0) return -1;
+    if (ensure_dir("app/neural/retrievers") != 0) return -1;
+    if (snprintf(path, sizeof(path), "app/neural/retrievers/%s_retriever.c", resource) < 0) return -1;
+
+    if (snprintf(buffer, sizeof(buffer),
+                 "/* Auto-generated neural retriever module: %s */\n"
+                 "#include \"core/neural_retrieval.h\"\n"
+                 "#include \"core/neural_embedding.h\"\n\n"
+                 "int %s_retriever_index_text(NeuralRetrieval *retrieval,\n"
+                 "                           const char *keyword,\n"
+                 "                           const char *text) {\n"
+                 "    NeuralEmbedding embedding;\n"
+                 "    if (!retrieval || !keyword || !text) return -1;\n"
+                 "    embedding = neural_embedding_from_text(text);\n"
+                 "    return neural_retrieval_store(retrieval, keyword, embedding);\n"
+                 "}\n\n"
+                 "int %s_retriever_search(NeuralRetrieval *retrieval,\n"
+                 "                        const char *query,\n"
+                 "                        int top_k,\n"
+                 "                        const char **out_keywords,\n"
+                 "                        float *out_scores) {\n"
+                 "    NeuralEmbedding query_embedding;\n"
+                 "    if (!retrieval || !query) return -1;\n"
+                 "    query_embedding = neural_embedding_from_text(query);\n"
+                 "    return neural_retrieval_search(retrieval, query_embedding, top_k, out_keywords, out_scores);\n"
+                 "}\n",
+                 resource,
+                 resource,
+                 resource) < 0) {
+        return -1;
+    }
+
+    return write_template_file(path, buffer);
+}
+
+int forge_generate_neural_integration(const char *name) {
+    char resource[64];
+    char path[256];
+    char buffer[3072];
+
+    if (forge_neural_resource_name(name, resource, sizeof(resource)) != 0) return -1;
+    if (ensure_dir("app") != 0) return -1;
+    if (ensure_dir("app/neural") != 0) return -1;
+    if (ensure_dir("app/neural/integrations") != 0) return -1;
+    if (snprintf(path, sizeof(path), "app/neural/integrations/%s_integration.c", resource) < 0) return -1;
+
+    if (snprintf(buffer, sizeof(buffer),
+                 "/* Auto-generated neural integration module: %s */\n"
+                 "#include \"core/llm_integration.h\"\n\n"
+                 "void %s_integration_init(LLMIntegration *llm) {\n"
+                 "    if (!llm) return;\n"
+                 "    llm_integration_init(llm, \"%s\");\n"
+                 "}\n\n"
+                 "int %s_integration_run(LLMIntegration *llm,\n"
+                 "                       const char *prompt_template,\n"
+                 "                       const NeuralPromptVar *vars,\n"
+                 "                       int var_count,\n"
+                 "                       char *out,\n"
+                 "                       int out_size) {\n"
+                 "    if (!llm || !prompt_template || !out || out_size <= 0) return -1;\n"
+                 "    return llm_integration_run(llm, prompt_template, vars, var_count, out, out_size);\n"
+                 "}\n",
+                 resource,
+                 resource,
+                 resource,
+                 resource) < 0) {
+        return -1;
+    }
+
+    return write_template_file(path, buffer);
+}
+
+int forge_generate_neural_policy(const char *name) {
+    char resource[64];
+    char path[256];
+    char buffer[3072];
+
+    if (forge_neural_resource_name(name, resource, sizeof(resource)) != 0) return -1;
+    if (ensure_dir("app") != 0) return -1;
+    if (ensure_dir("app/neural") != 0) return -1;
+    if (ensure_dir("app/neural/policies") != 0) return -1;
+    if (snprintf(path, sizeof(path), "app/neural/policies/%s_policy.c", resource) < 0) return -1;
+
+    if (snprintf(buffer, sizeof(buffer),
+                 "/* Auto-generated neural policy module: %s */\n"
+                 "#include <string.h>\n\n"
+                 "int %s_policy_allow_prompt(const char *prompt) {\n"
+                 "    if (!prompt) return 0;\n"
+                 "    if (strstr(prompt, \"password\") != NULL) return 0;\n"
+                 "    if (strstr(prompt, \"secret\") != NULL) return 0;\n"
+                 "    return 1;\n"
+                 "}\n\n"
+                 "int %s_policy_max_tokens(void) {\n"
+                 "    return 1024;\n"
+                 "}\n",
+                 resource,
+                 resource,
+                 resource) < 0) {
+        return -1;
+    }
+
+    return write_template_file(path, buffer);
 }
 
 int forge_generate_stimulus_controller(const char *name) {
@@ -2397,7 +2713,7 @@ int forge_new_project(const char *project_name) {
         "CC := gcc\n"
         "CORTEX_ROOT ?= ..\n"
         "CFLAGS := -Wall -Wextra -std=c11 -I. -I$(CORTEX_ROOT) -I$(CORTEX_ROOT)/core -I$(CORTEX_ROOT)/action -I$(CORTEX_ROOT)/config\n"
-        "APP_SRCS := main.c config/routes.c $(wildcard app/controllers/*.c) $(wildcard app/models/*.c) $(wildcard app/neural/*.c)\n\n"
+        "APP_SRCS := main.c config/routes.c $(wildcard app/controllers/*.c) $(wildcard app/models/*.c) $(wildcard app/neural/*.c) $(wildcard app/neural/*/*.c)\n\n"
         "cortex_app: $(APP_SRCS)\n"
         "\t$(CC) $(CFLAGS) $(APP_SRCS) -L$(CORTEX_ROOT) -lcortex -lm -o cortex_app\n\n"
         ".PHONY: all clean server dev assets-build\n"
