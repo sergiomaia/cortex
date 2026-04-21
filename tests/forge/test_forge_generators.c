@@ -38,6 +38,18 @@
      }
      globfree(&g);
  }
+
+static void remove_scaffold_migrations_for_table(const char *table_name) {
+    char pattern[256];
+
+    if (!table_name || table_name[0] == '\0') {
+        return;
+    }
+    if (snprintf(pattern, sizeof(pattern), "db/migrate/*_create_%s.sql", table_name) < 0) {
+        return;
+    }
+    remove_glob_matches(pattern);
+}
  
  /* Return 1 if path exists and contains substring, 0 otherwise. */
  static int file_contains(const char *path, const char *substring) {
@@ -342,7 +354,7 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     remove_if_exists(view_new_path);
     remove_if_exists(view_edit_path);
     remove_if_exists(layout_path);
-    remove_glob_matches("db/migrate/*.sql");
+    remove_scaffold_migrations_for_table("posts");
     remove_if_exists(react_entry_path);
     remove_if_exists(react_registry_path);
     remove_if_exists(react_resource_path);
@@ -426,7 +438,7 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     remove_if_exists(view_new_path);
     remove_if_exists(view_edit_path);
     remove_if_exists(layout_path);
-    remove_glob_matches("db/migrate/*.sql");
+    remove_scaffold_migrations_for_table("posts");
     remove_if_exists(react_entry_path);
     remove_if_exists(react_registry_path);
     remove_if_exists(react_resource_path);
@@ -449,6 +461,7 @@ void test_forge_scaffold_plural_input_uses_plural_controller_and_singular_model(
     remove_if_exists(wrong_model_path);
     remove_if_exists(wrong_controller_path);
     remove_if_exists(wrong_view_path);
+    remove_scaffold_migrations_for_table("pages");
 
     ASSERT_EQ(forge_generate_scaffold("Pages", attr_count, attrs, 0), 0);
     ASSERT_TRUE(file_exists(model_path));
@@ -461,5 +474,6 @@ void test_forge_scaffold_plural_input_uses_plural_controller_and_singular_model(
     remove_if_exists(model_path);
     remove_if_exists(controller_path);
     remove_if_exists(view_index_path);
+    remove_scaffold_migrations_for_table("pages");
 }
  

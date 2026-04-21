@@ -267,54 +267,27 @@ static int file_contains(const char *path, const char *substring) {
 
 /* Remove generated project dir and contents so tests don't leave artifacts. */
 static void remove_project_dir(const char *project_name) {
-    char path[256];
-    if (snprintf(path, sizeof(path), "%s/main.c", project_name) < 0) return;
-    remove_if_exists(path);
-    if (snprintf(path, sizeof(path), "%s/Makefile", project_name) < 0) return;
-    remove_if_exists(path);
-    if (snprintf(path, sizeof(path), "%s/.cortex_project", project_name) < 0) return;
-    remove_if_exists(path);
-    if (snprintf(path, sizeof(path), "%s/package.json", project_name) < 0) return;
-    remove_if_exists(path);
-    if (snprintf(path, sizeof(path), "%s/app/javascript/application.js", project_name) < 0) return;
-    remove_if_exists(path);
-    if (snprintf(path, sizeof(path), "%s/app/javascript/application.jsx", project_name) < 0) return;
-    remove_if_exists(path);
-    if (snprintf(path, sizeof(path), "%s/app/javascript/controllers/index.js", project_name) < 0) return;
-    remove_if_exists(path);
-    if (snprintf(path, sizeof(path), "%s/app/javascript/resources/index.jsx", project_name) < 0) return;
-    remove_if_exists(path);
-    if (snprintf(path, sizeof(path), "%s/app", project_name) < 0) return;
-    if (snprintf(path, sizeof(path), "%s/app/javascript/controllers", project_name) < 0) return;
-    rmdir(path);
-    if (snprintf(path, sizeof(path), "%s/app/javascript/resources", project_name) < 0) return;
-    rmdir(path);
-    if (snprintf(path, sizeof(path), "%s/app/javascript", project_name) < 0) return;
-    rmdir(path);
-    if (snprintf(path, sizeof(path), "%s/app/views/home", project_name) < 0) return;
-    rmdir(path);
-    if (snprintf(path, sizeof(path), "%s/app/views", project_name) < 0) return;
-    rmdir(path);
-    if (snprintf(path, sizeof(path), "%s/app/controllers", project_name) < 0) return;
-    rmdir(path);
-    if (snprintf(path, sizeof(path), "%s/app/models", project_name) < 0) return;
-    rmdir(path);
-    if (snprintf(path, sizeof(path), "%s/app/neural", project_name) < 0) return;
-    rmdir(path);
-    if (snprintf(path, sizeof(path), "%s/app", project_name) < 0) return;
-    rmdir(path);
-    if (snprintf(path, sizeof(path), "%s/public/assets", project_name) < 0) return;
-    rmdir(path);
-    if (snprintf(path, sizeof(path), "%s/public", project_name) < 0) return;
-    rmdir(path);
-    if (snprintf(path, sizeof(path), "%s/config", project_name) < 0) return;
-    rmdir(path);
-    if (snprintf(path, sizeof(path), "%s/db/development.sqlite3", project_name) < 0) return;
-    remove_if_exists(path);
-    if (snprintf(path, sizeof(path), "%s/db", project_name) < 0) return;
-    rmdir(path);
-    if (snprintf(path, sizeof(path), "%s", project_name) < 0) return;
-    rmdir(path);
+    char cmd[512];
+    int i;
+
+    if (!project_name || project_name[0] == '\0') {
+        return;
+    }
+
+    for (i = 0; project_name[i] != '\0'; ++i) {
+        char c = project_name[i];
+        if (!((c >= 'a' && c <= 'z') ||
+              (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') ||
+              c == '_' || c == '-')) {
+            return;
+        }
+    }
+
+    if (snprintf(cmd, sizeof(cmd), "rm -rf -- %s", project_name) < 0) {
+        return;
+    }
+    (void)system(cmd);
 }
 
 void test_cli_dispatch_generate_controller_executes_handler(void) {
