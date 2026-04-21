@@ -200,8 +200,11 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
 
         /* Allow forms:
          *   cortex generate <name>                        (controller)
-         *   cortex generate controller <name>           (controller)
-         *   cortex generate scaffold <Name> a:b c:d     (scaffold)
+         *   cortex generate controller <name>            (controller)
+         *   cortex generate resource <name>              (controller + views)
+         *   cortex generate model <name>                 (model only)
+         *   cortex generate service <name>               (service only)
+         *   cortex generate scaffold <Name> a:b c:d      (scaffold)
          */
         if (argc == 3) {
             out->command = CLI_COMMAND_GENERATE_CONTROLLER;
@@ -211,6 +214,24 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
 
         if (argc == 4 && strcmp(argv[2], "controller") == 0) {
             out->command = CLI_COMMAND_GENERATE_CONTROLLER;
+            out->name = argv[3];
+            return 0;
+        }
+
+        if (argc == 4 && strcmp(argv[2], "resource") == 0) {
+            out->command = CLI_COMMAND_GENERATE_RESOURCE;
+            out->name = argv[3];
+            return 0;
+        }
+
+        if (argc == 4 && strcmp(argv[2], "model") == 0) {
+            out->command = CLI_COMMAND_GENERATE_MODEL;
+            out->name = argv[3];
+            return 0;
+        }
+
+        if (argc == 4 && strcmp(argv[2], "service") == 0) {
+            out->command = CLI_COMMAND_GENERATE_SERVICE;
             out->name = argv[3];
             return 0;
         }
@@ -380,6 +401,42 @@ static int cli_handle_generate_controller(const char *name) {
     return 0;
 }
 
+static int cli_handle_generate_resource(const char *name) {
+    if (!name || name[0] == '\0') {
+        return -1;
+    }
+    printf("generate: creating resource '%s'\n", name);
+    if (forge_generate_resource(name) != 0) {
+        fprintf(stderr, "failed to generate resource for %s\n", name);
+        return -1;
+    }
+    return 0;
+}
+
+static int cli_handle_generate_model(const char *name) {
+    if (!name || name[0] == '\0') {
+        return -1;
+    }
+    printf("generate: creating model '%s'\n", name);
+    if (forge_generate_model(name) != 0) {
+        fprintf(stderr, "failed to generate model for %s\n", name);
+        return -1;
+    }
+    return 0;
+}
+
+static int cli_handle_generate_service(const char *name) {
+    if (!name || name[0] == '\0') {
+        return -1;
+    }
+    printf("generate: creating service '%s'\n", name);
+    if (forge_generate_service(name) != 0) {
+        fprintf(stderr, "failed to generate service for %s\n", name);
+        return -1;
+    }
+    return 0;
+}
+
 static int cli_handle_generate_scaffold(const char *name, int attr_count, const char **attributes, int use_react) {
     if (!name || name[0] == '\0') {
         return -1;
@@ -459,6 +516,12 @@ int cli_dispatch(const CliParsed *parsed) {
         return cli_handle_new(parsed->name);
     case CLI_COMMAND_GENERATE_CONTROLLER:
         return cli_handle_generate_controller(parsed->name);
+    case CLI_COMMAND_GENERATE_RESOURCE:
+        return cli_handle_generate_resource(parsed->name);
+    case CLI_COMMAND_GENERATE_MODEL:
+        return cli_handle_generate_model(parsed->name);
+    case CLI_COMMAND_GENERATE_SERVICE:
+        return cli_handle_generate_service(parsed->name);
     case CLI_COMMAND_GENERATE_SCAFFOLD:
         return cli_handle_generate_scaffold(parsed->name, parsed->attribute_count, parsed->attributes, parsed->use_react);
     case CLI_COMMAND_GENERATE_STIMULUS:
@@ -486,6 +549,9 @@ int cli_run(int argc, char **argv) {
         fprintf(stderr, "  %s new <project_name>\n", argv[0]);
         fprintf(stderr, "  %s generate <name>\n", argv[0]);
         fprintf(stderr, "  %s generate controller <name>\n", argv[0]);
+        fprintf(stderr, "  %s generate resource <name>\n", argv[0]);
+        fprintf(stderr, "  %s generate model <name>\n", argv[0]);
+        fprintf(stderr, "  %s generate service <name>\n", argv[0]);
         fprintf(stderr, "  %s generate stimulus <name>\n", argv[0]);
         fprintf(stderr, "  %s generate scaffold <Name> field:type field:type [--react|--no-react]\n", argv[0]);
         fprintf(stderr, "  %s assets:build\n", argv[0]);

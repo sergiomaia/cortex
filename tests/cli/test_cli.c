@@ -116,6 +116,42 @@ void test_cli_parse_generate_controller_command(void) {
     free_argv(argv, argc);
 }
 
+void test_cli_parse_generate_resource_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "generate", "resource", "posts", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_RESOURCE);
+    ASSERT_STR_EQ(parsed.name, "posts");
+
+    free_argv(argv, argc);
+}
+
+void test_cli_parse_generate_model_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "generate", "model", "post", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_MODEL);
+    ASSERT_STR_EQ(parsed.name, "post");
+
+    free_argv(argv, argc);
+}
+
+void test_cli_parse_generate_service_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "generate", "service", "mailer", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_SERVICE);
+    ASSERT_STR_EQ(parsed.name, "mailer");
+
+    free_argv(argv, argc);
+}
+
 void test_cli_parse_db_migrate_command(void) {
     int argc;
     char **argv = make_argv("cortex", "db:migrate", NULL, NULL, &argc);
@@ -289,6 +325,55 @@ void test_cli_dispatch_generate_controller_executes_handler(void) {
 
     parsed.command = CLI_COMMAND_GENERATE_CONTROLLER;
     parsed.name = "incidents";
+
+    ASSERT_EQ(cli_dispatch(&parsed), 0);
+    ASSERT_TRUE(file_exists(path));
+
+    remove_if_exists(path);
+}
+
+void test_cli_dispatch_generate_resource_executes_handler(void) {
+    const char *controller_path = "app/controllers/posts_controller.c";
+    const char *index_view_path = "app/views/posts/index.html";
+    CliParsed parsed;
+
+    remove_if_exists(controller_path);
+    remove_if_exists(index_view_path);
+
+    parsed.command = CLI_COMMAND_GENERATE_RESOURCE;
+    parsed.name = "post";
+
+    ASSERT_EQ(cli_dispatch(&parsed), 0);
+    ASSERT_TRUE(file_exists(controller_path));
+    ASSERT_TRUE(file_exists(index_view_path));
+
+    remove_if_exists(controller_path);
+    remove_if_exists(index_view_path);
+}
+
+void test_cli_dispatch_generate_model_executes_handler(void) {
+    const char *path = "app/models/post.c";
+    CliParsed parsed;
+
+    remove_if_exists(path);
+
+    parsed.command = CLI_COMMAND_GENERATE_MODEL;
+    parsed.name = "post";
+
+    ASSERT_EQ(cli_dispatch(&parsed), 0);
+    ASSERT_TRUE(file_exists(path));
+
+    remove_if_exists(path);
+}
+
+void test_cli_dispatch_generate_service_executes_handler(void) {
+    const char *path = "service/mailer.c";
+    CliParsed parsed;
+
+    remove_if_exists(path);
+
+    parsed.command = CLI_COMMAND_GENERATE_SERVICE;
+    parsed.name = "mailer";
 
     ASSERT_EQ(cli_dispatch(&parsed), 0);
     ASSERT_TRUE(file_exists(path));

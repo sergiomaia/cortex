@@ -1,5 +1,6 @@
 #include "../test_assert.h"
 #include "../../cache/cache.h"
+#include <unistd.h>
 
 void test_cache_memory_set_and_get_key(void) {
     Cache cache;

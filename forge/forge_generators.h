@@ -13,7 +13,9 @@
   */
  
  int forge_generate_controller(const char *name);
+int forge_generate_resource(const char *name);
  int forge_generate_model(const char *name);
+int forge_generate_service(const char *name);
  int forge_generate_neural_model(const char *name);
 int forge_generate_stimulus_controller(const char *name);
  

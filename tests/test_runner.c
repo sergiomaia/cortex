@@ -13,7 +13,7 @@
 #include "../guard/guard_session.h"
 #include "../guard/guard_auth.h"
 
-/* Prototypes for tests defined in tests/core/*.c, tests/action/*.c, tests/cache/*.c, tests/forge/*.c */
+/* Prototypes for tests defined under tests/core, tests/action, tests/cache and tests/forge. */
 void test_core_app_init_does_not_crash(void);
 void test_core_logger_outputs_messages(void);
 void test_core_config_loads_environment_variables(void);
@@ -88,9 +88,15 @@ void test_guard_auth_basic_success_and_failure(void);
 void test_forge_generate_controller_creates_file(void);
 void test_forge_generate_controller_users_creates_file_and_stub(void);
 void test_forge_generate_model_creates_file(void);
+void test_forge_generate_model_plural_input_creates_singular_model(void);
+void test_forge_generate_resource_creates_controller_and_views(void);
+void test_forge_generate_resource_plural_input_keeps_rails_naming(void);
+void test_forge_generate_service_creates_service_file(void);
 void test_forge_generate_model_user_creates_file_with_fields_and_active_record(void);
 void test_forge_generate_neural_model_creates_file(void);
+void test_forge_generate_neural_model_plural_input_creates_singular_file(void);
 void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void);
+void test_forge_scaffold_plural_input_uses_plural_controller_and_singular_model(void);
 void test_db_create_creates_db_folder_and_storage_file(void);
 void test_db_migrate_runs_pending_and_tracks_executed(void);
 void test_db_migration_generator_creates_timestamped_file_with_up_down(void);
@@ -99,12 +105,18 @@ void test_cli_parse_server_command(void);
 void test_cli_parse_version_command(void);
 void test_cli_parse_new_command(void);
 void test_cli_parse_generate_controller_command(void);
+void test_cli_parse_generate_resource_command(void);
+void test_cli_parse_generate_model_command(void);
+void test_cli_parse_generate_service_command(void);
 void test_cli_parse_db_migrate_command(void);
 void test_cli_parse_db_create_command(void);
 void test_cli_parse_generate_stimulus_command(void);
 void test_cli_parse_generate_scaffold_react_flags(void);
 void test_cli_parse_invalid_command_fails(void);
 void test_cli_dispatch_generate_controller_executes_handler(void);
+void test_cli_dispatch_generate_resource_executes_handler(void);
+void test_cli_dispatch_generate_model_executes_handler(void);
+void test_cli_dispatch_generate_service_executes_handler(void);
 void test_cli_dispatch_db_migrate_executes_handler(void);
 void test_cli_dispatch_db_create_executes_handler(void);
 void test_forge_new_creates_project_directory(void);
@@ -305,9 +317,15 @@ static void run_all_tests(void) {
     test_forge_generate_controller_creates_file();
     test_forge_generate_controller_users_creates_file_and_stub();
     test_forge_generate_model_creates_file();
+    test_forge_generate_model_plural_input_creates_singular_model();
+    test_forge_generate_resource_creates_controller_and_views();
+    test_forge_generate_resource_plural_input_keeps_rails_naming();
+    test_forge_generate_service_creates_service_file();
     test_forge_generate_model_user_creates_file_with_fields_and_active_record();
     test_forge_generate_neural_model_creates_file();
+    test_forge_generate_neural_model_plural_input_creates_singular_file();
     test_forge_scaffold_creates_model_controller_routes_fields_and_route();
+    test_forge_scaffold_plural_input_uses_plural_controller_and_singular_model();
 
     test_db_create_creates_db_folder_and_storage_file();
     test_db_migrate_runs_pending_and_tracks_executed();
@@ -317,12 +335,18 @@ static void run_all_tests(void) {
     test_cli_parse_version_command();
     test_cli_parse_new_command();
     test_cli_parse_generate_controller_command();
+    test_cli_parse_generate_resource_command();
+    test_cli_parse_generate_model_command();
+    test_cli_parse_generate_service_command();
     test_cli_parse_db_migrate_command();
     test_cli_parse_db_create_command();
     test_cli_parse_generate_stimulus_command();
     test_cli_parse_generate_scaffold_react_flags();
     test_cli_parse_invalid_command_fails();
     test_cli_dispatch_generate_controller_executes_handler();
+    test_cli_dispatch_generate_resource_executes_handler();
+    test_cli_dispatch_generate_model_executes_handler();
+    test_cli_dispatch_generate_service_executes_handler();
     test_cli_dispatch_db_migrate_executes_handler();
     test_cli_dispatch_db_create_executes_handler();
     test_forge_new_creates_project_directory();

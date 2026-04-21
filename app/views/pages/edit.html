@@ -1,0 +1,9 @@
+<h1>Edit page</h1>
+<form method="POST" action="/pages/1" data-controller="page" data-page-target="form" data-action="submit->page#submit">
+  <div>
+    <label for="title">title</label>
+    <input type="text" id="title" name="title" />
+  </div>
+  <input type="hidden" name="_method" value="PUT" />
+  <button type="submit">Update</button>
+</form>
