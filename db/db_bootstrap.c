@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../core/core_secret.h"
 #include "db_migrate.h"
 #include "db_paths.h"
 
@@ -50,6 +51,11 @@ void cortex_db_shutdown(void) {
 int cortex_db_bootstrap(void) {
     char path[512];
     int has_pending = 0;
+
+    if (cortex_secret_init() != 0) {
+        fprintf(stderr, "secret bootstrap failed (set SECRET_KEY_BASE or config/secret.key for production)\n");
+        return -1;
+    }
 
     if (db_path_for_environment(NULL, path, sizeof(path)) != 0) {
         fprintf(stderr, "db: failed to resolve database path\n");

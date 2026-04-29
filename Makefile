@@ -41,6 +41,7 @@ TEST_SRCS := tests/test_runner.c \
              tests/core/test_core_app.c \
              tests/core/test_core_logger.c \
              tests/core/test_core_config.c \
+             tests/core/test_core_secret.c \
              tests/core/test_routes.c \
              tests/core/test_neural_runtime.c \
              tests/core/test_neural_prompt.c \

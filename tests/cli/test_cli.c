@@ -489,6 +489,38 @@ static int write_file_from_string(const char *path, const char *content) {
 }
 
 /* Remove generated project dir and contents so tests don't leave artifacts. */
+static int line_is_hex128(const char *path) {
+    FILE *f;
+    char buf[260];
+    size_t len;
+    size_t i;
+
+    f = fopen(path, "rb");
+    if (!f) {
+        return 0;
+    }
+    if (!fgets(buf, (int)sizeof(buf), f)) {
+        fclose(f);
+        return 0;
+    }
+    fclose(f);
+    len = strlen(buf);
+    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r')) {
+        len--;
+    }
+    if (len != 128U) {
+        return 0;
+    }
+    for (i = 0; i < len; ++i) {
+        char c = buf[i];
+        int ok = ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'));
+        if (!ok) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 static void remove_project_dir(const char *project_name) {
     char cmd[512];
     int i;
@@ -794,6 +826,21 @@ void test_forge_new_creates_project_directory(void) {
     snprintf(path, sizeof(path), "%s/db/development.sqlite3", project_name);
     ASSERT_TRUE(file_exists(path));
 
+    snprintf(path, sizeof(path), "%s/config/secret.key", project_name);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(line_is_hex128(path));
+
+    snprintf(path, sizeof(path), "%s/.gitignore", project_name);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "/config/secret.key"));
+
+    {
+        struct stat st;
+        snprintf(path, sizeof(path), "%s/config/secret.key", project_name);
+        ASSERT_EQ(stat(path, &st), 0);
+        ASSERT_EQ((int)(st.st_mode & 0777), 0600);
+    }
+
     remove_project_dir(project_name);
 }
 
@@ -848,6 +895,14 @@ void test_cli_dispatch_new_creates_project(void) {
     ASSERT_TRUE(dir_exists(path));
     snprintf(path, sizeof(path), "%s/db/development.sqlite3", project_name);
     ASSERT_TRUE(file_exists(path));
+
+    snprintf(path, sizeof(path), "%s/config/secret.key", project_name);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(line_is_hex128(path));
+
+    snprintf(path, sizeof(path), "%s/.gitignore", project_name);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "/config/secret.key"));
 
     remove_project_dir(project_name);
 }
