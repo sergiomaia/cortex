@@ -17,6 +17,12 @@
 void test_core_app_init_does_not_crash(void);
 void test_core_logger_outputs_messages(void);
 void test_core_config_loads_environment_variables(void);
+void test_secret_init_from_secret_key_base_env(void);
+void test_secret_env_overrides_config_file(void);
+void test_secret_loads_from_config_file(void);
+void test_secret_get_cached_stable_pointer(void);
+void test_secret_init_fails_in_production_without_key(void);
+void test_secret_production_accepts_env(void);
 void test_neural_runtime_run_returns_response(void);
 void test_neural_runtime_model_name_and_prompt_usage(void);
 void test_neural_runtime_cache_returns_cached_response_for_same_prompt(void);
@@ -275,6 +281,13 @@ static void run_all_tests(void) {
     test_core_app_init_does_not_crash();
     test_core_logger_outputs_messages();
     test_core_config_loads_environment_variables();
+
+    test_secret_init_from_secret_key_base_env();
+    test_secret_env_overrides_config_file();
+    test_secret_loads_from_config_file();
+    test_secret_get_cached_stable_pointer();
+    test_secret_init_fails_in_production_without_key();
+    test_secret_production_accepts_env();
     test_neural_runtime_run_returns_response();
     test_neural_runtime_model_name_and_prompt_usage();
     test_neural_runtime_cache_returns_cached_response_for_same_prompt();

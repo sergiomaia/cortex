@@ -1,5 +1,6 @@
 #include "forge_generators.h"
 
+#include "../core/core_secret.h"
 #include "../db/db_create.h"
 
 #include <ctype.h>
@@ -2939,6 +2940,19 @@ int forge_new_project(const char *project_name) {
         return -1;
     }
     if (ensure_dir(path) != 0) {
+        return -1;
+    }
+    /* Rails-like secret_key_base: secure key file + gitignore (see core_secret). */
+    if (snprintf(path, sizeof(path), "%s/config/secret.key", project_name) < 0) {
+        return -1;
+    }
+    if (cortex_secret_write_new_project_keyfile(path) != 0) {
+        return -1;
+    }
+    if (snprintf(path, sizeof(path), "%s/.gitignore", project_name) < 0) {
+        return -1;
+    }
+    if (write_template_file(path, "/config/secret.key\n") != 0) {
         return -1;
     }
     if (snprintf(path, sizeof(path), "%s/db", project_name) < 0) {
