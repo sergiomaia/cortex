@@ -193,7 +193,7 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
         return 0;
     }
 
-    if (strcmp(argv[1], "generate") == 0) {
+    if (strcmp(argv[1], "generate") == 0 || strcmp(argv[1], "g") == 0) {
         if (argc < 3) {
             return -1;
         }
@@ -310,7 +310,9 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
             out->use_react = 1;
             attributes = (const char **)&argv[4];
 
-            /* Validate tokens look like field:type. */
+            /* Validate tokens look like field or field:type.
+             * When no type is provided, scaffold defaults to string.
+             */
             for (i = 4; i < argc; ++i) {
                 const char *tok = argv[i];
                 const char *colon;
@@ -330,7 +332,7 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
                     return -1;
                 }
                 colon = strchr(tok, ':');
-                if (!colon || colon == tok || colon[1] == '\0') {
+                if (colon == tok || (colon && colon[1] == '\0')) {
                     return -1;
                 }
                 ++attr_count;
@@ -683,21 +685,37 @@ int cli_run(int argc, char **argv) {
         fprintf(stderr, "  %s server\n", argv[0]);
         fprintf(stderr, "  %s new <project_name>\n", argv[0]);
         fprintf(stderr, "  %s generate <name>\n", argv[0]);
+        fprintf(stderr, "  %s g <name>\n", argv[0]);
         fprintf(stderr, "  %s generate controller <name>\n", argv[0]);
+        fprintf(stderr, "  %s g controller <name>\n", argv[0]);
         fprintf(stderr, "  %s generate resource <name>\n", argv[0]);
+        fprintf(stderr, "  %s g resource <name>\n", argv[0]);
         fprintf(stderr, "  %s generate model <name>\n", argv[0]);
+        fprintf(stderr, "  %s g model <name>\n", argv[0]);
         fprintf(stderr, "  %s generate service <name>\n", argv[0]);
+        fprintf(stderr, "  %s g service <name>\n", argv[0]);
         fprintf(stderr, "  %s generate neural:model <name>\n", argv[0]);
+        fprintf(stderr, "  %s g neural:model <name>\n", argv[0]);
         fprintf(stderr, "  %s generate neural:prompt <name>\n", argv[0]);
+        fprintf(stderr, "  %s g neural:prompt <name>\n", argv[0]);
         fprintf(stderr, "  %s generate neural:agent <name>\n", argv[0]);
+        fprintf(stderr, "  %s g neural:agent <name>\n", argv[0]);
         fprintf(stderr, "  %s generate neural:rag <name>\n", argv[0]);
+        fprintf(stderr, "  %s g neural:rag <name>\n", argv[0]);
         fprintf(stderr, "  %s generate neural:stream <name>\n", argv[0]);
+        fprintf(stderr, "  %s g neural:stream <name>\n", argv[0]);
         fprintf(stderr, "  %s generate neural:memory <name>\n", argv[0]);
+        fprintf(stderr, "  %s g neural:memory <name>\n", argv[0]);
         fprintf(stderr, "  %s generate neural:retriever <name>\n", argv[0]);
+        fprintf(stderr, "  %s g neural:retriever <name>\n", argv[0]);
         fprintf(stderr, "  %s generate neural:integration <name>\n", argv[0]);
+        fprintf(stderr, "  %s g neural:integration <name>\n", argv[0]);
         fprintf(stderr, "  %s generate neural:policy <name>\n", argv[0]);
+        fprintf(stderr, "  %s g neural:policy <name>\n", argv[0]);
         fprintf(stderr, "  %s generate stimulus <name>\n", argv[0]);
+        fprintf(stderr, "  %s g stimulus <name>\n", argv[0]);
         fprintf(stderr, "  %s generate scaffold <Name> field:type field:type [--react|--no-react]\n", argv[0]);
+        fprintf(stderr, "  %s g scaffold <Name> field:type field:type [--react|--no-react]\n", argv[0]);
         fprintf(stderr, "  %s assets:build\n", argv[0]);
         fprintf(stderr, "  %s dev\n", argv[0]);
         fprintf(stderr, "  %s db:migrate\n", argv[0]);

@@ -116,6 +116,30 @@ void test_cli_parse_generate_controller_command(void) {
     free_argv(argv, argc);
 }
 
+void test_cli_parse_g_controller_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "g", "controller", "users", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_CONTROLLER);
+    ASSERT_STR_EQ(parsed.name, "users");
+
+    free_argv(argv, argc);
+}
+
+void test_cli_parse_g_short_controller_command(void) {
+    int argc;
+    char **argv = make_argv("cortex", "g", "users", NULL, &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_CONTROLLER);
+    ASSERT_STR_EQ(parsed.name, "users");
+
+    free_argv(argv, argc);
+}
+
 void test_cli_parse_generate_resource_command(void) {
     int argc;
     char **argv = make_argv("cortex", "generate", "resource", "posts", &argc);
@@ -306,6 +330,46 @@ void test_cli_parse_generate_scaffold_react_flags(void) {
     ASSERT_STR_EQ(parsed.name, "Post");
     ASSERT_EQ(parsed.attribute_count, 2);
     ASSERT_EQ(parsed.use_react, 0);
+
+    free_argv(argv, argc);
+}
+
+void test_cli_parse_g_scaffold_react_flags(void) {
+    int argc;
+    char **argv = make_argv7("cortex", "g", "scaffold", "Post", "title:string", "body:text", "--no-react", &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_SCAFFOLD);
+    ASSERT_STR_EQ(parsed.name, "Post");
+    ASSERT_EQ(parsed.attribute_count, 2);
+    ASSERT_EQ(parsed.use_react, 0);
+
+    free_argv(argv, argc);
+}
+
+void test_cli_parse_generate_scaffold_missing_type_defaults_to_string(void) {
+    int argc;
+    char **argv = make_argv7("cortex", "generate", "scaffold", "Post", "title", "body:text", NULL, &argc);
+    CliParsed parsed;
+
+    ASSERT_EQ(cli_parse(argc, argv, &parsed), 0);
+    ASSERT_EQ(parsed.command, CLI_COMMAND_GENERATE_SCAFFOLD);
+    ASSERT_STR_EQ(parsed.name, "Post");
+    ASSERT_EQ(parsed.attribute_count, 2);
+    ASSERT_STR_EQ(parsed.attributes[0], "title");
+    ASSERT_STR_EQ(parsed.attributes[1], "body:text");
+    ASSERT_EQ(parsed.use_react, 1);
+
+    free_argv(argv, argc);
+}
+
+void test_cli_parse_generate_scaffold_empty_type_fails(void) {
+    int argc;
+    char **argv = make_argv6("cortex", "generate", "scaffold", "Post", "title:", NULL, &argc);
+    CliParsed parsed;
+
+    ASSERT_TRUE(cli_parse(argc, argv, &parsed) != 0);
 
     free_argv(argv, argc);
 }

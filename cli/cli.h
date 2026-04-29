@@ -7,6 +7,7 @@
  *   cortex server
  *   cortex new <project_name>
  *   cortex generate controller <name>
+ *   cortex g controller <name>
  *   cortex generate neural:model <name>
  *   cortex generate neural:prompt <name>
  *   cortex generate neural:agent <name>
