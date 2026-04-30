@@ -102,12 +102,62 @@ char *action_assets_inject_javascript(const char *html) {
     return out;
 }
 
+static int asset_rel_path_safe(const char *rel) {
+    if (!rel || rel[0] == '\0') {
+        return -1;
+    }
+    if (rel[0] == '/') {
+        return -1;
+    }
+    if (strstr(rel, "..") != NULL) {
+        return -1;
+    }
+    return 0;
+}
+
+static const char *guess_content_type(const char *request_path) {
+    if (strstr(request_path, ".css") != NULL) {
+        return "text/css; charset=utf-8";
+    }
+    if (strstr(request_path, ".js") != NULL) {
+        return "application/javascript";
+    }
+    if (strstr(request_path, ".json") != NULL) {
+        return "application/json";
+    }
+    if (strstr(request_path, ".png") != NULL) {
+        return "image/png";
+    }
+    if (strstr(request_path, ".jpg") != NULL || strstr(request_path, ".jpeg") != NULL) {
+        return "image/jpeg";
+    }
+    if (strstr(request_path, ".gif") != NULL) {
+        return "image/gif";
+    }
+    if (strstr(request_path, ".svg") != NULL) {
+        return "image/svg+xml";
+    }
+    if (strstr(request_path, ".webp") != NULL) {
+        return "image/webp";
+    }
+    if (strstr(request_path, ".ico") != NULL) {
+        return "image/x-icon";
+    }
+    if (strstr(request_path, ".woff2") != NULL) {
+        return "font/woff2";
+    }
+    if (strstr(request_path, ".woff") != NULL) {
+        return "font/woff";
+    }
+    return "text/plain";
+}
+
 int action_assets_serve_static_path(const char *request_path, int client_fd) {
     char fs_path[512];
     FILE *f;
     long len;
     char *body;
-    const char *ctype = "text/plain";
+    const char *ctype;
     char header[512];
     int header_len;
 
@@ -121,7 +171,19 @@ int action_assets_serve_static_path(const char *request_path, int client_fd) {
         return -1;
     }
     f = fopen(fs_path, "rb");
-    if (!f) return -1;
+    if (!f) {
+        const char *rel = request_path + 8;
+        if (asset_rel_path_safe(rel) != 0) {
+            return -1;
+        }
+        if (snprintf(fs_path, sizeof(fs_path), "app/assets/%s", rel) >= (int)sizeof(fs_path)) {
+            return -1;
+        }
+        f = fopen(fs_path, "rb");
+        if (!f) {
+            return -1;
+        }
+    }
     if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return -1; }
     len = ftell(f);
     if (len < 0) { fclose(f); return -1; }
@@ -135,8 +197,7 @@ int action_assets_serve_static_path(const char *request_path, int client_fd) {
     }
     fclose(f);
 
-    if (strstr(request_path, ".js") != NULL) ctype = "application/javascript";
-    if (strstr(request_path, ".json") != NULL) ctype = "application/json";
+    ctype = guess_content_type(request_path);
 
     header_len = snprintf(header, sizeof(header),
                           "HTTP/1.1 200 OK\r\n"

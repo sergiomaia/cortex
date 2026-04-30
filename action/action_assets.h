@@ -6,7 +6,7 @@
  */
 const char *action_assets_javascript_path(void);
 
-/* Serves files from public/assets for /assets/... requests.
+/* Serves /assets/... from public/assets first, then app/assets (Rails-like source tree).
  * Returns 0 if served, -1 otherwise.
  */
 int action_assets_serve_static_path(const char *request_path, int client_fd);

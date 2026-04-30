@@ -817,6 +817,14 @@ void test_forge_new_creates_project_directory(void) {
     ASSERT_TRUE(file_exists(path));
     snprintf(path, sizeof(path), "%s/app/javascript/application.jsx", project_name);
     ASSERT_TRUE(file_exists(path));
+    snprintf(path, sizeof(path), "%s/app/views/layouts/application.html", project_name);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "/assets/stylesheets/application.css"));
+    snprintf(path, sizeof(path), "%s/app/assets/stylesheets/application.css", project_name);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "/assets/stylesheets/application.css"));
+    snprintf(path, sizeof(path), "%s/app/assets/images", project_name);
+    ASSERT_TRUE(dir_exists(path));
     snprintf(path, sizeof(path), "%s/app", project_name);
     ASSERT_TRUE(dir_exists(path));
     snprintf(path, sizeof(path), "%s/config", project_name);
@@ -887,6 +895,13 @@ void test_cli_dispatch_new_creates_project(void) {
     ASSERT_TRUE(file_exists(path));
     snprintf(path, sizeof(path), "%s/app/javascript/application.jsx", project_name);
     ASSERT_TRUE(file_exists(path));
+    snprintf(path, sizeof(path), "%s/app/views/layouts/application.html", project_name);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "/assets/stylesheets/application.css"));
+    snprintf(path, sizeof(path), "%s/app/assets/stylesheets/application.css", project_name);
+    ASSERT_TRUE(file_exists(path));
+    snprintf(path, sizeof(path), "%s/app/assets/images", project_name);
+    ASSERT_TRUE(dir_exists(path));
     snprintf(path, sizeof(path), "%s/app", project_name);
     ASSERT_TRUE(dir_exists(path));
     snprintf(path, sizeof(path), "%s/config", project_name);
