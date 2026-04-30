@@ -30,6 +30,7 @@ void test_root_route_returns_welcome_page(void) {
     /* Welcome page should now return full HTML. */
     ASSERT_TRUE(strstr(res.body, "<h1>") != NULL);
     ASSERT_TRUE(strstr(res.body, "Welcome to Cortex.") != NULL);
+    ASSERT_TRUE(strstr(res.body, "/assets/stylesheets/application.css") != NULL);
 
     /* Placeholders should be substituted with dynamic values. */
     ASSERT_TRUE(strstr(res.body, "{{C_STANDARD}}") == NULL);

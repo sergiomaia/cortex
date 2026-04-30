@@ -78,6 +78,9 @@ void test_action_health_endpoint_flow(void);
 void test_action_incidents_show_integration(void);
 void test_action_ai_incident_summary_endpoint(void);
 void test_action_ai_rag_endpoint(void);
+void test_action_assets_serves_stylesheet_from_app_assets(void);
+void test_action_assets_public_directory_over_app_assets(void);
+void test_action_assets_rejects_path_traversal(void);
 void test_llm_integration_validates_prompt_and_response(void);
 void test_llm_integration_handles_missing_variables_as_empty(void);
 
@@ -345,6 +348,9 @@ static void run_all_tests(void) {
     test_action_incidents_show_integration();
     test_action_ai_incident_summary_endpoint();
     test_action_ai_rag_endpoint();
+    test_action_assets_serves_stylesheet_from_app_assets();
+    test_action_assets_public_directory_over_app_assets();
+    test_action_assets_rejects_path_traversal();
     test_action_router_add_and_match_literal();
     test_action_router_match_with_param();
     test_action_dispatch_success_and_not_found();

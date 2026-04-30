@@ -14,6 +14,7 @@
  #include <stdarg.h>
  
 static int ensure_javascript_structure(void);
+static int ensure_app_assets_at(const char *project_root);
 static int write_scaffold_react_resource_files(const char *resource,
                                                const char *resource_plural,
                                                int attr_count,
@@ -1157,6 +1158,48 @@ static int forge_emit_scaffold_controller_react(ForgeStrBuf *b,
  
      return 0;
  }
+
+ static int write_template_file_if_missing(const char *path, const char *contents) {
+     FILE *f = fopen(path, "r");
+     if (f) {
+         fclose(f);
+         return 0;
+     }
+     return write_template_file(path, contents);
+ }
+
+ static const char *default_application_css(void) {
+     return "/*\n"
+            " * Application-wide styles (Cortex).\n"
+            " * Served at /assets/stylesheets/application.css\n"
+            " */\n\n"
+            "body {\n"
+            "  margin: 0;\n"
+            "}\n";
+ }
+
+ /* project_root NULL or empty: app/assets under cwd. Otherwise <root>/app/assets. */
+ static int ensure_app_assets_at(const char *project_root) {
+     char path[384];
+     const char *css = default_application_css();
+     int use_prefix = (project_root != NULL && project_root[0] != '\0');
+
+     if (!use_prefix) {
+         if (ensure_dir("app/assets") != 0) return -1;
+         if (ensure_dir("app/assets/images") != 0) return -1;
+         if (ensure_dir("app/assets/stylesheets") != 0) return -1;
+         return write_template_file_if_missing("app/assets/stylesheets/application.css", css);
+     }
+
+     if (snprintf(path, sizeof(path), "%s/app/assets", project_root) < 0) return -1;
+     if (ensure_dir(path) != 0) return -1;
+     if (snprintf(path, sizeof(path), "%s/app/assets/images", project_root) < 0) return -1;
+     if (ensure_dir(path) != 0) return -1;
+     if (snprintf(path, sizeof(path), "%s/app/assets/stylesheets", project_root) < 0) return -1;
+     if (ensure_dir(path) != 0) return -1;
+     if (snprintf(path, sizeof(path), "%s/app/assets/stylesheets/application.css", project_root) < 0) return -1;
+     return write_template_file(path, css);
+ }
  
  int forge_generate_controller(const char *name) {
     char resource[64];
@@ -1894,6 +1937,7 @@ static int ensure_javascript_structure(void) {
     if (write_template_file("app/javascript/controllers/index.js", controllers_index) != 0) return -1;
     if (write_template_file("app/javascript/resources/index.jsx", resources_index) != 0) return -1;
     if (write_template_file("js/runtime/index.js", runtime_js) != 0) return -1;
+    if (ensure_app_assets_at(NULL) != 0) return -1;
     return 0;
 }
 
@@ -2240,6 +2284,7 @@ static int write_default_application_layout_if_missing(void) {
         "<head>\n"
         "  <meta charset=\"UTF-8\" />\n"
         "  <title>Cortex App</title>\n"
+        "  <link rel=\"stylesheet\" href=\"/assets/stylesheets/application.css\" />\n"
         "</head>\n"
         "<body>\n"
         "{{yield}}\n"
@@ -2764,6 +2809,7 @@ int forge_new_project(const char *project_name) {
         "<head>\n"
         "  <meta charset=\"UTF-8\" />\n"
         "  <title>Cortex App</title>\n"
+        "  <link rel=\"stylesheet\" href=\"/assets/stylesheets/application.css\" />\n"
         "</head>\n"
         "<body>\n"
         "{{yield}}\n"
@@ -2775,6 +2821,7 @@ int forge_new_project(const char *project_name) {
         "<head>\n"
         "  <meta charset=\"UTF-8\" />\n"
         "  <title>Cortex — Welcome</title>\n"
+        "  <link rel=\"stylesheet\" href=\"/assets/stylesheets/application.css\" />\n"
         "  <style>\n"
         "    body {\n"
         "      margin: 0;\n"
@@ -3019,6 +3066,9 @@ int forge_new_project(const char *project_name) {
         return -1;
     }
     if (ensure_dir(path) != 0) {
+        return -1;
+    }
+    if (ensure_app_assets_at(project_name) != 0) {
         return -1;
     }
     if (snprintf(path, sizeof(path), "%s/public", project_name) < 0) {

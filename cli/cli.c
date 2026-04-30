@@ -149,7 +149,8 @@ static int build_js_bundle(int watch_mode) {
     if (snprintf(command, sizeof(command),
                  "rm -f public/assets/application*.js public/assets/manifest.json && "
                  "npx esbuild %s --bundle --format=esm --outdir=public/assets --entry-names=%s %s %s %s && "
-                 "node -e \"const fs=require('fs');const p='public/assets';const files=fs.readdirSync(p).filter(f=>/^application.*\\\\.js$/.test(f)).sort();const file=files[files.length-1]||'application.js';fs.writeFileSync(p+'/manifest.json',JSON.stringify({'application.js':file,environment:'%s'},null,2));\"",
+                 "node -e \"const fs=require('fs');const p='public/assets';const files=fs.readdirSync(p).filter(f=>/^application.*\\\\.js$/.test(f)).sort();const file=files[files.length-1]||'application.js';fs.writeFileSync(p+'/manifest.json',JSON.stringify({'application.js':file,environment:'%s'},null,2));\" && "
+                 "(test -d app/assets && { mkdir -p public/assets && cp -R app/assets/. public/assets/; } || true)",
                  javascript_entrypoint_path(), entry_names, sourcemap, minify, watch, mode_dir) < 0) {
         return -1;
     }

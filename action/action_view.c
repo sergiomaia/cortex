@@ -123,6 +123,7 @@ static char *render_home_index_html(void) {
         "<head>\n"
         "  <meta charset=\"UTF-8\" />\n"
         "  <title>Cortex — Welcome</title>\n"
+        "  <link rel=\"stylesheet\" href=\"/assets/stylesheets/application.css\" />\n"
         "  <style>\n"
         "    body {\n"
         "      margin: 0;\n"

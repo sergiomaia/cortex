@@ -1,0 +1,8 @@
+/*
+ * Application-wide styles (Cortex).
+ * Served at /assets/stylesheets/application.css
+ */
+
+body {
+  margin: 0;
+}
