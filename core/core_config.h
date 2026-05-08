@@ -12,5 +12,9 @@ typedef struct {
  */
 CoreConfig core_config_load(void);
 
+/* Read values from config/database.ini [db] section. */
+int core_config_get_int(const char *key, int default_value);
+const char *core_config_get_string(const char *key, const char *default_value);
+
 #endif /* CORE_CONFIG_H */
 
