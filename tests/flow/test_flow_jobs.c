@@ -1,4 +1,5 @@
 #include "../test_assert.h"
+#include "../cortex_test.h"
 #include "../../flow/flow.h"
 
 typedef struct {
@@ -82,3 +83,11 @@ void test_flow_queue_maintains_execution_order(void) {
     flow_queue_free(&queue);
 }
 
+CT_SUITE_BEGIN(flow_jobs)
+    CT_TEST(test_flow_queue_enqueue_and_worker_dispatch_executes_jobs)
+    CT_TEST(test_flow_queue_maintains_execution_order)
+CT_SUITE_END()
+
+void run_flow_jobs_tests(void) {
+    CT_RUN_SUITE();
+}

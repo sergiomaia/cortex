@@ -1,4 +1,5 @@
 #include "../test_assert.h"
+#include "../cortex_test.h"
 #include "../../guard/guard_session.h"
 #include "../../guard/guard_auth.h"
 
@@ -39,5 +40,14 @@ void test_guard_auth_basic_success_and_failure(void) {
     ASSERT_EQ(guard_session_validate(&store, token), 1);
 
     guard_session_store_free(&store);
+}
+
+CT_SUITE_BEGIN(guard)
+    CT_TEST(test_guard_session_create_and_validate)
+    CT_TEST(test_guard_auth_basic_success_and_failure)
+CT_SUITE_END()
+
+void run_guard_tests(void) {
+    CT_RUN_SUITE();
 }
 

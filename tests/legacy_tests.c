@@ -1,19 +1,13 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include "../core/core_env.h"
-#include "../core/core_config.h"
-#include "../core/core_logger.h"
-#include "../action/action_router.h"
-#include "../action/action_dispatch.h"
 #include "test_assert.h"
 
-/* Guard */
-#include "../guard/guard_session.h"
-#include "../guard/guard_auth.h"
+#include "../action/action_dispatch.h"
+#include "../action/action_router.h"
+#include "../core/core_config.h"
+#include "../core/core_env.h"
+#include "../core/core_logger.h"
 
-/* Prototypes for tests defined under tests/core, tests/action, tests/cache and tests/forge. */
+#include <stdlib.h>
+
 void test_core_app_init_does_not_crash(void);
 void test_core_logger_outputs_messages(void);
 void test_core_config_loads_environment_variables(void);
@@ -79,6 +73,9 @@ void test_action_health_endpoint_flow(void);
 void test_action_incidents_show_integration(void);
 void test_action_ai_incident_summary_endpoint(void);
 void test_action_ai_rag_endpoint(void);
+void test_action_middleware_chain_execution_order(void);
+void test_action_middleware_can_modify_request_before_controller(void);
+void test_action_middleware_can_modify_response_after_controller(void);
 void test_action_assets_serves_stylesheet_from_app_assets(void);
 void test_action_assets_public_directory_over_app_assets(void);
 void test_action_assets_rejects_path_traversal(void);
@@ -171,13 +168,6 @@ void test_cli_dispatch_db_create_executes_handler(void);
 void test_forge_new_creates_project_directory(void);
 void test_forge_new_creates_main_c_and_makefile(void);
 void test_cli_dispatch_new_creates_project(void);
-void test_cli_server_starts_http_and_handles_health_route(void);
-
-void test_pulse_metrics_counts_and_times_requests_and_ai_calls(void);
-void test_pulse_trace_measures_elapsed_time_and_updates_metrics(void);
-
-int test_count = 0;
-int test_failures = 0;
 
 static void test_core_env_current_defaults_to_development(void) {
     CoreEnv env = core_env_current();
@@ -193,61 +183,15 @@ static void test_core_config_load_defaults(void) {
 static void test_core_logger_levels(void) {
     CoreLogger logger = core_logger_init(stdout, CORE_LOG_LEVEL_INFO);
 
-    /* Both info and error should be logged when level is INFO. */
     core_logger_info(&logger, "info message");
     core_logger_error(&logger, "error message");
 
     logger = core_logger_init(stdout, CORE_LOG_LEVEL_ERROR);
 
-    /* Only error should be logged when level is ERROR. */
     core_logger_info(&logger, "info should be filtered");
     core_logger_error(&logger, "error should appear");
 
-    /* No assertions on output, just ensure no crashes / undefined behavior. */
     ASSERT_TRUE(1);
-}
-
-static void test_action_router_add_and_match_literal(void) {
-    ActionRouter router;
-    ActionHandler handler;
-
-    action_router_init(&router);
-
-    void sample_handler(ActionRequest *req, ActionResponse *res) {
-        (void)req;
-        res->status = 200;
-        res->body = "ok";
-    }
-
-    ASSERT_EQ(action_router_add_route(&router, "GET", "/hello", sample_handler), 0);
-
-    handler = action_router_match(&router, "GET", "/hello");
-    ASSERT_TRUE(handler != NULL);
-    ASSERT_TRUE(handler == sample_handler);
-
-    handler = action_router_match(&router, "POST", "/hello");
-    ASSERT_TRUE(handler == NULL);
-}
-
-static void test_action_router_match_with_param(void) {
-    ActionRouter router;
-    ActionHandler handler;
-
-    action_router_init(&router);
-
-    void sample_handler(ActionRequest *req, ActionResponse *res) {
-        (void)req;
-        res->status = 200;
-        res->body = "ok";
-    }
-
-    ASSERT_EQ(action_router_add_route(&router, "GET", "/users/:id", sample_handler), 0);
-
-    handler = action_router_match(&router, "GET", "/users/123");
-    ASSERT_TRUE(handler != NULL);
-
-    handler = action_router_match(&router, "GET", "/users");
-    ASSERT_TRUE(handler == NULL);
 }
 
 static void test_action_dispatch_success_and_not_found(void) {
@@ -283,16 +227,22 @@ static void test_action_dispatch_success_and_not_found(void) {
     ASSERT_EQ(action_dispatch(&router, &req, &res), -1);
     ASSERT_EQ(res.status, 404);
     ASSERT_STR_EQ(res.body, "Not Found");
+
+    free(router.routes);
 }
 
-static void run_all_tests(void) {
+/*
+ * Additional integration coverage not grouped into numbered suites lives here so
+ * previously registered Cortex tests remain single-pass.
+ */
+void run_legacy_tests(void) {
+    printf("\n▶ Legacy and integration corpus\n");
+
     test_core_env_current_defaults_to_development();
     test_core_config_load_defaults();
     test_core_logger_levels();
     test_core_app_init_does_not_crash();
     test_core_logger_outputs_messages();
-    test_core_config_loads_environment_variables();
-    test_core_config_get_db_values_from_ini();
 
     test_secret_init_from_secret_key_base_env();
     test_secret_env_overrides_config_file();
@@ -300,10 +250,7 @@ static void run_all_tests(void) {
     test_secret_get_cached_stable_pointer();
     test_secret_init_fails_in_production_without_key();
     test_secret_production_accepts_env();
-    test_neural_runtime_run_returns_response();
-    test_neural_runtime_model_name_and_prompt_usage();
-    test_neural_runtime_cache_returns_cached_response_for_same_prompt();
-    test_neural_runtime_cache_hit_avoids_recomputation();
+
     test_neural_prompt_replaces_variables();
     test_neural_prompt_handles_missing_variables();
     test_incident_summary_builds_prompt_and_returns_response();
@@ -313,24 +260,11 @@ static void run_all_tests(void) {
     test_neural_embedding_same_input_same_vector();
     test_neural_embedding_different_input_different_vector();
     test_neural_embedding_generates_vector_from_text();
-    test_active_model_init_sets_id_and_starts_empty();
-    test_active_model_set_and_get_fields();
-    test_active_model_update_existing_field();
     test_pulse_log_generates_entries();
     test_pulse_log_ai_includes_prompt_and_response();
     test_pulse_logger_logs_info_and_error();
     test_llm_integration_validates_prompt_and_response();
     test_llm_integration_handles_missing_variables_as_empty();
-    test_active_record_create_save_find();
-    test_active_record_delete_and_data_consistency();
-    test_active_migration_register_and_execute_in_order();
-    test_active_migration_run_only_pending();
-    test_active_query_where_filters_by_name();
-    test_active_query_limit_caps_results();
-    test_active_query_where_and_limit_chaining();
-    test_active_query_where_filters_by_custom_field();
-    test_active_query_execute_returns_empty_array_when_no_match();
-    test_active_query_where_filters_by_id();
     test_active_relations_incident_has_many_logs();
     test_neural_retrieval_store_and_search_top_k();
     test_neural_retrieval_integrates_with_memory();
@@ -345,34 +279,27 @@ static void run_all_tests(void) {
     test_root_route_returns_welcome_page();
     test_posts_index_route_via_router();
     test_action_request_parse_simple_get();
-    test_action_response_set_formats_fields();
     test_action_request_form_get_decodes_urlencoded();
     test_action_request_form_present_matches_names();
-    test_action_router_register_and_match_literal_route();
-    test_action_router_match_dynamic_incident_route();
-    test_action_controller_receives_request_params();
-    test_action_controller_render_json_and_text();
-    test_action_dispatch_post_method_override_delete();
+    /*
+     * Dispatch must run before middleware integration tests, which register
+     * global hooks that change action_dispatch output.
+     */
+    test_action_dispatch_success_and_not_found();
     test_action_health_endpoint_flow();
     test_action_incidents_show_integration();
     test_action_ai_incident_summary_endpoint();
     test_action_ai_rag_endpoint();
+    test_action_middleware_chain_execution_order();
+    test_action_middleware_can_modify_request_before_controller();
+    test_action_middleware_can_modify_response_after_controller();
     test_action_assets_serves_stylesheet_from_app_assets();
     test_action_assets_public_directory_over_app_assets();
     test_action_assets_rejects_path_traversal();
-    test_action_router_add_and_match_literal();
-    test_action_router_match_with_param();
-    test_action_dispatch_success_and_not_found();
-
-    test_flow_queue_enqueue_and_worker_dispatch_executes_jobs();
-    test_flow_queue_maintains_execution_order();
 
     test_cache_memory_set_and_get_key();
     test_cache_memory_overwrite_value();
     test_cache_memory_optional_expiration();
-
-    test_guard_session_create_and_validate();
-    test_guard_auth_basic_success_and_failure();
 
     test_forge_generate_controller_creates_file();
     test_forge_generate_controller_users_creates_file_and_stub();
@@ -399,13 +326,6 @@ static void run_all_tests(void) {
     test_db_migrate_runs_pending_and_tracks_executed();
     test_db_migrate_default_has_pending_tracks_sql_files();
     test_db_migration_generator_creates_timestamped_file_with_up_down();
-    test_db_pool_initialization_and_clamped_size();
-    test_db_pool_acquire_release_and_reuse();
-    test_db_pool_acquire_multiple_connections();
-    test_db_pool_blocking_behavior_when_exhausted();
-    test_db_pool_applies_wal_mode();
-    test_db_pool_shutdown_is_idempotent();
-    test_db_pool_global_api_acquire_release();
 
     test_cli_parse_server_command();
     test_cli_parse_version_command();
@@ -451,23 +371,4 @@ static void run_all_tests(void) {
     test_forge_new_creates_project_directory();
     test_forge_new_creates_main_c_and_makefile();
     test_cli_dispatch_new_creates_project();
-
-    /* NOTE: network integration test can hang in sandboxed CI environments. */
-    /* test_cli_server_starts_http_and_handles_health_route(); */
-
-    test_pulse_metrics_counts_and_times_requests_and_ai_calls();
-    test_pulse_trace_measures_elapsed_time_and_updates_metrics();
 }
-
-int main(void) {
-    run_all_tests();
-
-    printf("\nTotal tests: %d\n", test_count);
-    printf("Failures   : %d\n", test_failures);
-
-    if (test_failures > 0) {
-        return 1;
-    }
-    return 0;
-}
-
