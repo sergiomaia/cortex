@@ -1,12 +1,22 @@
 CC := gcc
 VERSION := $(strip $(file <VERSION))
+COVERAGE ?=
 
 # SQLite: always compile the official amalgamation into libcortex.a so apps only need
 # `-lcortex -lm` (see scripts/fetch-sqlite-amalgamation.sh; runs automatically on first build).
 SQLITE_CFLAGS := -I$(CURDIR)/vendor/sqlite
 SQLITE_SRCS := vendor/sqlite/sqlite3.c
 
-CFLAGS := -Wall -Wextra -std=c11 -pthread $(SQLITE_CFLAGS) -I. -Icore -Iaction -Iflow -Icache -Iguard -Iforge -Iconfig -Idb -DCORTEX_VERSION=\"$(VERSION)\" -DCORTEX_SOURCE_ROOT=\"$(CURDIR)\"
+CFLAGS := -Wall -Wextra -std=c11 -pthread $(SQLITE_CFLAGS) -I. -Itests -Icore -Iaction -Iflow -Icache -Iguard -Iforge -Iconfig -Idb -DCORTEX_VERSION=\"$(VERSION)\" -DCORTEX_SOURCE_ROOT=\"$(CURDIR)\"
+LDFLAGS ?=
+
+ifeq ($(COVERAGE),yes)
+CFLAGS += --coverage
+LDFLAGS += --coverage
+COVERAGE_LIBS := -lgcov
+else
+COVERAGE_LIBS :=
+endif
 
 # The first explicit rule in this file must not steal the default goal from 'all'.
 .DEFAULT_GOAL := all
@@ -36,57 +46,16 @@ vendor/sqlite/sqlite3.c:
 
 $(OBJS): | vendor/sqlite/sqlite3.c
 
-TEST_SRCS := tests/test_runner.c \
-             tests/flow/test_flow.c \
-             tests/core/test_core_app.c \
-             tests/core/test_core_logger.c \
-             tests/core/test_core_config.c \
-             tests/core/test_core_secret.c \
-             tests/core/test_routes.c \
-             tests/core/test_neural_runtime.c \
-             tests/core/test_neural_prompt.c \
-             tests/core/test_incident_summary.c \
-             tests/core/test_neural_memory.c \
-             tests/core/test_pulse_log.c \
-             tests/core/test_pulse_logger.c \
-             tests/core/test_pulse_metrics.c \
-             tests/core/test_pulse_trace.c \
-             tests/core/test_pulse_ai.c \
-             tests/core/test_neural_pulse_ai_integration.c \
-             tests/core/test_neural_stream.c \
-             tests/core/test_neural_embedding.c \
-             tests/core/test_neural_retrieval.c \
-             tests/core/test_llm_integration.c \
-             tests/core/test_neural_agent.c \
-             tests/core/test_active_model.c \
-             tests/core/test_active_migration.c \
-             tests/core/test_active_record.c \
-             tests/core/test_active_query.c \
-             tests/core/test_active_relations.c \
-             tests/action/test_action_request_response.c \
-             tests/action/test_action_router.c \
-             tests/action/test_action_controller.c \
-             tests/action/test_action_health.c \
-             tests/action/test_action_incidents.c \
-             tests/action/test_action_ai_incident_summary.c \
-             tests/action/test_action_ai_rag.c \
-             tests/action/test_action_assets.c \
-             tests/cache/test_cache_memory.c \
-             tests/guard/test_guard.c \
-             tests/forge/test_forge_generators.c \
-             tests/db/test_db_create.c \
-             tests/db/test_db_migrate.c \
-             tests/db/test_db_migration_generator.c \
-             tests/db/test_db_pool.c \
-             tests/cli/test_cli.c \
-             tests/cli/test_cli_server.c
+# All test translation units discovered under tests/, linked with libcortex.a.
+TEST_SRCS := $(shell find $(CURDIR)/tests -name '*.c' ! -path '*/vendor/*' | LC_ALL=C sort)
 TEST_BIN := build/tests/test_runner
+TEST_DB := :memory:
 
 EXE := cortex
 LIB := libcortex.a
 MAIN_OBJ := $(CLI_MAIN_SRC:.c=.o)
 
-.PHONY: all clean rebuild test tests vendor-sqlite
+.PHONY: all clean rebuild test tests test-watch coverage clean-test vendor-sqlite
 
 all: $(LIB) $(EXE)
 
@@ -107,15 +76,35 @@ $(LIB): $(OBJS)
 
 $(TEST_BIN): $(LIB) $(TEST_SRCS)
 	@mkdir -p $(dir $(TEST_BIN))
-	$(CC) $(CFLAGS) $(TEST_SRCS) -L. -lcortex -lm -o $(TEST_BIN)
+	$(CC) $(CFLAGS) $(TEST_SRCS) -L. $(LIB) -lm $(LDFLAGS) $(COVERAGE_LIBS) -o $(TEST_BIN)
 
 $(EXE): $(LIB) $(MAIN_OBJ)
-	$(CC) $(CFLAGS) $(MAIN_OBJ) -L. -lcortex -lm -o $(EXE)
+	$(CC) $(CFLAGS) $(MAIN_OBJ) -L. -lcortex -lm $(LDFLAGS) $(COVERAGE_LIBS) -o $(EXE)
 
 test: $(TEST_BIN)
-	./$(TEST_BIN)
+	@TEST_DB="$(TEST_DB)" ./$(TEST_BIN)
 
 tests: test
+
+test-watch:
+	@{ command -v entr >/dev/null 2>&1 || { printf "entr is required for test-watch\n"; exit 1; }; }
+	find . \( -name '*.c' -o -name '*.h' \) ! -path './vendor/*' | entr -c $(MAKE) test
+
+coverage:
+	@command -v lcov >/dev/null 2>&1 || { printf "lcov is required (e.g. sudo apt-get install lcov)\n"; exit 1; }
+	$(MAKE) clean
+	$(MAKE) COVERAGE=yes $(LIB) $(TEST_BIN)
+	./$(TEST_BIN)
+	lcov --capture --directory "$(CURDIR)" --output-file coverage.info --no-external \
+		--exclude '*/vendor/*' \
+		--exclude '*/tests/*'
+	genhtml coverage.info --output-directory coverage_html --quiet
+	@echo "Report: $$(pwd)/coverage_html/index.html"
+
+clean-test:
+	rm -f $(TEST_BIN) coverage.info
+	rm -rf coverage_html
+	find "$(CURDIR)" ! -path '*/vendor/*' \( -name '*.gcda' -o -name '*.gcno' \) -delete 2>/dev/null || true
 
 clean:
 	rm -f $(OBJS) $(LIB) $(TEST_BIN) $(EXE) $(MAIN_OBJ)

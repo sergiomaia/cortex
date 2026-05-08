@@ -1,3 +1,5 @@
+#define _DEFAULT_SOURCE
+
 #include "../test_assert.h"
 
 #include "../../action/action_assets.h"

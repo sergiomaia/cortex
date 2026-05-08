@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "../test_assert.h"
+#include "../cortex_test.h"
 
 #include <pthread.h>
 #include <stdio.h>
@@ -189,4 +190,18 @@ void test_db_pool_global_api_acquire_release(void) {
     cortex_db_pool_release(conn);
     cortex_db_pool_shutdown();
     cortex_db_pool_shutdown();
+}
+
+CT_SUITE_BEGIN(db_pool)
+    CT_TEST(test_db_pool_initialization_and_clamped_size)
+    CT_TEST(test_db_pool_acquire_release_and_reuse)
+    CT_TEST(test_db_pool_acquire_multiple_connections)
+    CT_TEST(test_db_pool_blocking_behavior_when_exhausted)
+    CT_TEST(test_db_pool_applies_wal_mode)
+    CT_TEST(test_db_pool_shutdown_is_idempotent)
+    CT_TEST(test_db_pool_global_api_acquire_release)
+CT_SUITE_END()
+
+void run_db_pool_tests(void) {
+    CT_RUN_SUITE();
 }
