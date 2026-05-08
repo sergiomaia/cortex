@@ -1,12 +1,12 @@
 #include "db_bootstrap.h"
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
+#include "../core/core_config.h"
 #include "../core/core_secret.h"
 #include "db_migrate.h"
 #include "db_paths.h"
+#include "db_pool.h"
 
 static DbConnection *g_db;
 
@@ -15,37 +15,51 @@ DbConnection *cortex_db_connection(void) {
 }
 
 int cortex_db_exec(const char *sql) {
-    if (!g_db) {
+    DbConnection *conn;
+
+    if (!sql) {
+        return -1;
+    }
+    conn = cortex_db_pool_acquire();
+    if (!conn) {
         fprintf(stderr, "db: no database connection (cortex_db_init not called?)\n");
         return -1;
     }
-    return db_connection_exec(g_db, sql);
+    {
+        int rc = db_connection_exec(conn, sql);
+        cortex_db_pool_release(conn);
+        return rc;
+    }
 }
 
 int cortex_db_init(void) {
-    char path[512];
+    int pool_size;
+    DbConnection *conn;
 
-    if (g_db) {
+    if (cortex_db_connection()) {
         return 0;
     }
 
-    if (db_path_for_environment(NULL, path, sizeof(path)) != 0) {
-        fprintf(stderr, "db: failed to resolve database path\n");
+    pool_size = core_config_get_int("db.pool_size", DB_POOL_DEFAULT_SIZE);
+
+    if (cortex_db_pool_init(pool_size) != 0) {
         return -1;
     }
 
-    if (db_connection_open(path, &g_db) != 0) {
+    conn = cortex_db_pool_acquire();
+    if (!conn) {
+        cortex_db_pool_shutdown();
         return -1;
     }
+    g_db = conn;
+    cortex_db_pool_release(conn);
+
     return 0;
 }
 
 void cortex_db_shutdown(void) {
-    if (!g_db) {
-        return;
-    }
-    db_connection_close(g_db);
     g_db = NULL;
+    cortex_db_pool_shutdown();
 }
 
 int cortex_db_bootstrap(void) {

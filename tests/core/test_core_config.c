@@ -21,3 +21,10 @@ void test_core_config_loads_environment_variables(void) {
     unsetenv("CORE_PORT");
 }
 
+void test_core_config_get_db_values_from_ini(void) {
+    ASSERT_EQ(core_config_get_int("db.pool_size", 2), 4);
+    ASSERT_EQ(core_config_get_int("db.pool_timeout_ms", 1000), 5000);
+    ASSERT_STR_EQ(core_config_get_string("db.journal_mode", "DELETE"), "WAL");
+    ASSERT_STR_EQ(core_config_get_string("db.unknown_key", "fallback"), "fallback");
+}
+

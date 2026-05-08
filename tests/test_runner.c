@@ -17,6 +17,7 @@
 void test_core_app_init_does_not_crash(void);
 void test_core_logger_outputs_messages(void);
 void test_core_config_loads_environment_variables(void);
+void test_core_config_get_db_values_from_ini(void);
 void test_secret_init_from_secret_key_base_env(void);
 void test_secret_env_overrides_config_file(void);
 void test_secret_loads_from_config_file(void);
@@ -118,6 +119,13 @@ void test_db_create_creates_db_folder_and_storage_file(void);
 void test_db_migrate_runs_pending_and_tracks_executed(void);
 void test_db_migrate_default_has_pending_tracks_sql_files(void);
 void test_db_migration_generator_creates_timestamped_file_with_up_down(void);
+void test_db_pool_initialization_and_clamped_size(void);
+void test_db_pool_acquire_release_and_reuse(void);
+void test_db_pool_acquire_multiple_connections(void);
+void test_db_pool_blocking_behavior_when_exhausted(void);
+void test_db_pool_applies_wal_mode(void);
+void test_db_pool_shutdown_is_idempotent(void);
+void test_db_pool_global_api_acquire_release(void);
 
 void test_cli_parse_server_command(void);
 void test_cli_parse_version_command(void);
@@ -284,6 +292,7 @@ static void run_all_tests(void) {
     test_core_app_init_does_not_crash();
     test_core_logger_outputs_messages();
     test_core_config_loads_environment_variables();
+    test_core_config_get_db_values_from_ini();
 
     test_secret_init_from_secret_key_base_env();
     test_secret_env_overrides_config_file();
@@ -390,6 +399,13 @@ static void run_all_tests(void) {
     test_db_migrate_runs_pending_and_tracks_executed();
     test_db_migrate_default_has_pending_tracks_sql_files();
     test_db_migration_generator_creates_timestamped_file_with_up_down();
+    test_db_pool_initialization_and_clamped_size();
+    test_db_pool_acquire_release_and_reuse();
+    test_db_pool_acquire_multiple_connections();
+    test_db_pool_blocking_behavior_when_exhausted();
+    test_db_pool_applies_wal_mode();
+    test_db_pool_shutdown_is_idempotent();
+    test_db_pool_global_api_acquire_release();
 
     test_cli_parse_server_command();
     test_cli_parse_version_command();

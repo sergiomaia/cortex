@@ -6,7 +6,7 @@ VERSION := $(strip $(file <VERSION))
 SQLITE_CFLAGS := -I$(CURDIR)/vendor/sqlite
 SQLITE_SRCS := vendor/sqlite/sqlite3.c
 
-CFLAGS := -Wall -Wextra -std=c11 $(SQLITE_CFLAGS) -I. -Icore -Iaction -Iflow -Icache -Iguard -Iforge -Iconfig -Idb -DCORTEX_VERSION=\"$(VERSION)\" -DCORTEX_SOURCE_ROOT=\"$(CURDIR)\"
+CFLAGS := -Wall -Wextra -std=c11 -pthread $(SQLITE_CFLAGS) -I. -Icore -Iaction -Iflow -Icache -Iguard -Iforge -Iconfig -Idb -DCORTEX_VERSION=\"$(VERSION)\" -DCORTEX_SOURCE_ROOT=\"$(CURDIR)\"
 
 # The first explicit rule in this file must not steal the default goal from 'all'.
 .DEFAULT_GOAL := all
@@ -77,6 +77,7 @@ TEST_SRCS := tests/test_runner.c \
              tests/db/test_db_create.c \
              tests/db/test_db_migrate.c \
              tests/db/test_db_migration_generator.c \
+             tests/db/test_db_pool.c \
              tests/cli/test_cli.c \
              tests/cli/test_cli_server.c
 TEST_BIN := build/tests/test_runner
