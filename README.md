@@ -87,7 +87,7 @@ Cortex includes:
 - **Flow**: jobs, queues, workers, pipelines
 - **Forge**: project and code generators
 - **Guard**: authentication, policies, and security helpers
-- **Pulse**: logging, metrics, tracing, AI observability
+- **Pulse**: structured logging (TEXT + NDJSON), metrics, tracing, AI observability
 - **Cache**: in-memory and external cache abstractions
 - **CLI**: the `cortex` command entrypoint
 - **App**: example application code (controllers, models, neural)
@@ -147,6 +147,134 @@ Alternate forms: `cortex db create`, `cortex db migrate`.
 ### HTTP port (for local servers and tests)
 
 - The embedded HTTP server listens on **`CORE_PORT`**, default **3000** (`core_config_load()`). Tests may set `CORE_PORT` to avoid clashes with other services on port 3000.
+
+## Logging and Observability (Pulse)
+
+Cortex ships with **Pulse**, a native, dependency-free structured logging
+subsystem. It delivers a Rails-like developer experience in TEXT mode and
+emits valid **NDJSON** (one JSON object per line) for production aggregators
+— no third-party libraries, no heap allocations on the hot path, thread-safe
+via `pthread` mutex.
+
+The public API lives in **`core/pulse.h`** / **`core/pulse.c`**.
+
+### Bootstrap
+
+Executables built on `libcortex` initialize Pulse automatically through
+`cortex_main_bootstrap()` (see `core/main.c`), which the `cortex` CLI invokes
+on startup and pairs with `cortex_main_shutdown()` on exit. Inside library
+code or tests you can call the public API directly:
+
+```c
+#include "core/pulse.h"
+
+PulseConfig cfg = {0};
+cfg.level    = PULSE_INFO;
+cfg.format   = PULSE_FMT_TEXT;
+cfg.output   = stderr;
+cfg.colorize = 1;
+pulse_init(&cfg);
+
+pulse_log(PULSE_INFO, "boot", "service ready on port %d", 3000);
+
+pulse_log_fields(PULSE_INFO, "action", "request completed",
+                 "method", "GET",
+                 "path",   "/posts",
+                 "status", "200",
+                 NULL);
+
+pulse_shutdown();
+```
+
+Convenience macros (`LOG_DEBUG`, `LOG_INFO`, `LOG_WARN`, `LOG_ERROR`,
+`LOG_FATAL`, `LOG_WITH`) wrap `pulse_log` / `pulse_log_fields` for the common
+case. Calling any logging function before `pulse_init` is a silent no-op so
+libraries can instrument themselves without forcing a logger lifecycle on
+their consumers — except `PULSE_FATAL`, which always `abort()`s.
+
+### Levels
+
+| Level          | Use case                                  |
+|----------------|-------------------------------------------|
+| `PULSE_DEBUG`  | Verbose diagnostics (e.g. fast SQL).      |
+| `PULSE_INFO`   | Normal lifecycle and request events.      |
+| `PULSE_WARN`   | Recoverable anomalies (e.g. slow SQL).    |
+| `PULSE_ERROR`  | Errors that did not stop the process.     |
+| `PULSE_FATAL`  | Unrecoverable — calls `abort()`.          |
+| `PULSE_SILENT` | Suppress every emit (FATAL still aborts). |
+
+### Environment-driven configuration
+
+`pulse_init_from_env()` (called by `cortex_main_bootstrap()`) reads:
+
+| Variable          | Behavior                                                                                                |
+|-------------------|---------------------------------------------------------------------------------------------------------|
+| `CORE_ENV`        | Selects an environment profile (see below). Defaults to `development`.                                  |
+| `CORE_LOG_LEVEL`  | Override level: `debug`, `info`, `warn`, `error`, `fatal`, `silent`.                                     |
+| `CORE_LOG_FILE`   | If set, Pulse opens that file for append, owns it, and rotates it (10 MiB × 5 files by default).         |
+
+| `CORE_ENV`     | Format | Output  | Default level | Colors |
+|----------------|--------|---------|---------------|--------|
+| `development`  | TEXT   | stderr  | `INFO`        | auto (TTY) |
+| `test`         | TEXT   | stderr  | `WARN`        | off    |
+| `production`   | JSON   | stdout  | `INFO`        | off    |
+
+ANSI colors are always disabled when writing to a file, regardless of the
+`colorize` config flag.
+
+### Output formats
+
+Development (TEXT, colorized when on a TTY):
+
+```text
+2026-05-09 14:32:01.042  INFO   [action]  request completed  method=GET  path=/posts  status=200  duration=4ms
+```
+
+Production (NDJSON, one object per line):
+
+```json
+{"ts":"2026-05-09T14:32:01.042Z","level":"INFO","module":"action","msg":"request completed","method":"GET","path":"/posts","status":"200","duration":"4ms"}
+```
+
+JSON values are escaped per ECMA-404 (quotes, backslashes, control
+characters as `\uXXXX`). Timestamps are local in TEXT mode and UTC in JSON
+mode, both with millisecond precision.
+
+### File rotation
+
+When `cfg.log_file` (or `CORE_LOG_FILE`) is set, Pulse rotates on size:
+
+```text
+app.log         # current (active stream)
+app.log.1       # most recent backup
+app.log.2
+...
+app.log.N       # oldest, dropped when N == max_files
+```
+
+`stdout` and `stderr` are never rotated.
+
+### Automatic framework integrations
+
+Once Pulse is initialized, several Cortex modules emit structured events
+without any extra wiring:
+
+- **`action/action_dispatch.c`** — every dispatch logs a Rails-like
+  `request completed` event with `method`, `path`, `status`, `duration`.
+  HTTP status family maps to level: 2xx/3xx → `INFO`, 4xx → `WARN`,
+  5xx → `ERROR`.
+- **`db/sqlite/sqlite_adapter.c`** — every `db_connection_exec` is timed
+  with `CLOCK_MONOTONIC`. Successful fast queries log at `DEBUG`, queries
+  slower than 100 ms log at `WARN` (`slow query`), and failures log at
+  `ERROR` with `sql`, `duration`, `rc`, and `error` fields. Prepare/step
+  failures also surface as `ERROR` events.
+- **`core/cortex_error.c`** — `cortex_err_print()` no longer writes to
+  stderr directly; every `CortexError` is converted into a structured Pulse
+  event under the `cortex.error` module with `code`, `source`, `at`,
+  `errno` fields.
+- **`core/main.c`** + **`cli/cortex_main.c`** — Pulse is initialized from
+  the environment at process start and shut down on exit, with
+  `framework starting` / `framework shutting down` events on either side.
 
 ## Getting Started
 
@@ -343,8 +471,6 @@ Contributions are welcome.
 Please open an issue for bugs or feature requests, and submit pull requests
 with your improvements.
 
-## License
-
-License terms depend on the upstream project license.
-If a `LICENSE` file is not present in your checkout, please refer to the
-repository metadata for the authoritative license information.
+# ## License
+# Cortex is released under the [MIT License](LICENSE).
+# Copyright (c) 2026 Sergio Maia
