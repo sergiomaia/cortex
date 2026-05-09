@@ -3,6 +3,8 @@
 
 #include "active_query.h"
 
+#include "cortex_error.h"
+
 void active_query_init(ActiveQuery *query, ActiveRecordStore *store) {
     if (!query) {
         return;
@@ -77,6 +79,8 @@ ActiveModel **active_query_execute(ActiveQuery *query, int *out_count) {
     }
 
     if (!query || !query->store) {
+        CORTEX_SET_ERROR(CORTEX_ERR_INVALID_ARGUMENT, "active:active_query_execute",
+                         "query runner requires a populated ActiveRecord store");
         return NULL;
     }
 
@@ -93,6 +97,8 @@ ActiveModel **active_query_execute(ActiveQuery *query, int *out_count) {
         results = (ActiveModel **)malloc(sizeof(ActiveModel *) * (size_t)alloc_size);
     }
     if (!results) {
+        CORTEX_SET_ERROR(CORTEX_ERR_CORE_OOM, "active:active_query_execute",
+                         "unable to allocate query result bucket");
         return NULL;
     }
 
@@ -107,6 +113,6 @@ ActiveModel **active_query_execute(ActiveQuery *query, int *out_count) {
         *out_count = matched;
     }
 
+    cortex_clear_error();
     return results;
 }
-

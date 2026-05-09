@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "../core/core_config.h"
+#include "cortex_error.h"
 #include "db_paths.h"
 
 static DbPool g_db_pool;
@@ -31,6 +32,8 @@ static int db_pool_apply_pragmas(DbConnection *conn) {
     char sql[128];
 
     if (!conn) {
+        CORTEX_SET_ERROR(CORTEX_ERR_INVALID_ARGUMENT, "db:db_pool_apply_pragmas",
+                         "Connection handle is NULL");
         return -1;
     }
 
@@ -48,6 +51,8 @@ static int db_pool_apply_pragmas(DbConnection *conn) {
     }
 
     if (snprintf(sql, sizeof(sql), "PRAGMA journal_mode=%s;", journal_mode) >= (int)sizeof(sql)) {
+        CORTEX_SET_ERROR(CORTEX_ERR_INVALID_ARGUMENT, "db:db_pool_apply_pragmas",
+                         "journal_mode pragma string too long");
         return -1;
     }
     if (db_connection_exec(conn, sql) != 0) {
@@ -55,6 +60,8 @@ static int db_pool_apply_pragmas(DbConnection *conn) {
     }
 
     if (snprintf(sql, sizeof(sql), "PRAGMA synchronous=%s;", sync_mode) >= (int)sizeof(sql)) {
+        CORTEX_SET_ERROR(CORTEX_ERR_INVALID_ARGUMENT, "db:db_pool_apply_pragmas",
+                         "synchronous pragma string too long");
         return -1;
     }
     if (db_connection_exec(conn, sql) != 0) {
@@ -62,11 +69,14 @@ static int db_pool_apply_pragmas(DbConnection *conn) {
     }
 
     if (snprintf(sql, sizeof(sql), "PRAGMA busy_timeout=%d;", timeout_ms) >= (int)sizeof(sql)) {
+        CORTEX_SET_ERROR(CORTEX_ERR_INVALID_ARGUMENT, "db:db_pool_apply_pragmas",
+                         "busy_timeout pragma too long");
         return -1;
     }
     if (db_connection_exec(conn, sql) != 0) {
         return -1;
     }
+    /* Last PRAGMA succeeded; leave success flag to caller to clear once fully done. */
     return 0;
 }
 
@@ -88,6 +98,8 @@ int db_pool_init(DbPool *pool, const char *db_path, int size) {
     int real_size;
 
     if (!pool || !db_path || db_path[0] == '\0') {
+        CORTEX_SET_ERROR(CORTEX_ERR_INVALID_ARGUMENT, "db:db_pool_init",
+                         "Invalid pool pointer or database path");
         return -1;
     }
 
@@ -95,10 +107,14 @@ int db_pool_init(DbPool *pool, const char *db_path, int size) {
     memset(pool, 0, sizeof(*pool));
 
     if (pthread_mutex_init(&pool->pool_lock, NULL) != 0) {
+        CORTEX_SET_ERROR(CORTEX_ERR_UNKNOWN, "db:db_pool_init",
+                         "pthread_mutex_init failed for pool lock");
         return -1;
     }
     if (pthread_cond_init(&pool->slot_available, NULL) != 0) {
         (void)pthread_mutex_destroy(&pool->pool_lock);
+        CORTEX_SET_ERROR(CORTEX_ERR_UNKNOWN, "db:db_pool_init",
+                         "pthread_cond_init failed for pool condition");
         return -1;
     }
 
@@ -117,6 +133,8 @@ int db_pool_init(DbPool *pool, const char *db_path, int size) {
             }
             (void)pthread_cond_destroy(&pool->slot_available);
             (void)pthread_mutex_destroy(&pool->pool_lock);
+            CORTEX_SET_ERROR(CORTEX_ERR_UNKNOWN, "db:db_pool_init",
+                             "pthread_mutex initialization failed while building pool slots");
             return -1;
         }
 
@@ -132,6 +150,7 @@ int db_pool_init(DbPool *pool, const char *db_path, int size) {
             }
             (void)pthread_cond_destroy(&pool->slot_available);
             (void)pthread_mutex_destroy(&pool->pool_lock);
+            /* Thread-local error already set by db_connection_open. */
             return -1;
         }
 
@@ -149,10 +168,15 @@ int db_pool_init(DbPool *pool, const char *db_path, int size) {
             }
             (void)pthread_cond_destroy(&pool->slot_available);
             (void)pthread_mutex_destroy(&pool->pool_lock);
+            if (!cortex_has_error()) {
+                CORTEX_SET_ERROR(CORTEX_ERR_DB_EXEC, "db:db_pool_init",
+                                 "Applying PRAGMA settings failed during pool warmup");
+            }
             return -1;
         }
     }
 
+    cortex_clear_error();
     return 0;
 }
 
@@ -253,14 +277,20 @@ int cortex_db_pool_init(int size) {
     }
 
     if (db_path_for_environment(NULL, g_db_pool_path, sizeof(g_db_pool_path)) != 0) {
+        CORTEX_SET_ERROR(CORTEX_ERR_IO, "db:cortex_db_pool_init",
+                         "Unable to derive database filesystem path");
         return -1;
     }
 
     if (db_pool_init(&g_db_pool, g_db_pool_path, size) != 0) {
-        fprintf(stderr, "db: failed to initialize connection pool for '%s'\n", g_db_pool_path);
+        if (!cortex_has_error()) {
+            CORTEX_SET_ERRORF(CORTEX_ERR_DB_CONNECT, "db:cortex_db_pool_init",
+                              "Failed to initialize connection pool for '%s'", g_db_pool_path);
+        }
         return -1;
     }
     g_db_pool_initialized = 1;
+    cortex_clear_error();
     return 0;
 }
 
