@@ -11,6 +11,7 @@ void run_active_migration_tests(void);
 void run_core_config_tests(void);
 void run_core_string_tests(void);
 void run_cortex_error_tests(void);
+void run_pulse_tests(void);
 void run_action_router_tests(void);
 void run_action_controller_tests(void);
 void run_action_response_tests(void);
@@ -34,6 +35,7 @@ int main(void) {
     run_core_config_tests();
     run_core_string_tests();
     run_cortex_error_tests();
+    run_pulse_tests();
 
     run_action_router_tests();
     run_action_controller_tests();
