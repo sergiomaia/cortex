@@ -3,10 +3,20 @@
 
 #include <stddef.h>
 
-/* Minimal database abstraction (SQLite-backed). */
+typedef enum {
+    CORTEX_DB_BACKEND_SQLITE = 0,
+    CORTEX_DB_BACKEND_POSTGRESQL = 1,
+} CortexDbBackend;
+
+/*
+ * Engine-agnostic database facade. Backends register via db_connection_open (SQLite)
+ * or postgres_connect / connection pool when PostgreSQL is enabled and selected.
+ */
 
 typedef struct DbConnection DbConnection;
 typedef struct DbStatement DbStatement;
+
+CortexDbBackend db_connection_backend(const DbConnection *conn);
 
 int db_connection_open(const char *path, DbConnection **out);
 void db_connection_close(DbConnection *conn);

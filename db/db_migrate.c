@@ -8,7 +8,6 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#include "db_connection.h"
 #include "db_paths.h"
 #include "sql_migrate.h"
 
@@ -194,6 +193,45 @@ static int sqlite_schema_migrations_exists(DbConnection *conn) {
     return exists;
 }
 
+static int postgres_schema_migrations_exists(DbConnection *conn) {
+    DbStatement *st = NULL;
+    int step;
+    int exists = 0;
+
+    if (!conn) {
+        return -1;
+    }
+
+    if (db_connection_prepare(
+            conn,
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_name = 'schema_migrations'",
+            &st) != 0) {
+        return -1;
+    }
+
+    step = db_statement_step(st);
+    if (step == 1) {
+        exists = 1;
+    } else if (step < 0) {
+        db_statement_finalize(st);
+        return -1;
+    }
+
+    db_statement_finalize(st);
+    return exists;
+}
+
+static int schema_migrations_table_exists(DbConnection *conn) {
+    if (!conn) {
+        return -1;
+    }
+    if (db_connection_backend(conn) == CORTEX_DB_BACKEND_POSTGRESQL) {
+        return postgres_schema_migrations_exists(conn);
+    }
+    return sqlite_schema_migrations_exists(conn);
+}
+
 static int sqlite_load_executed(DbConnection *conn, int *out_versions, int out_cap) {
     DbStatement *st = NULL;
     int count = 0;
@@ -248,7 +286,8 @@ static int sqlite_sync_executed(DbConnection *conn, const ActiveMigrationRegistr
     return 0;
 }
 
-static int db_migrate_sqlite_has_pending_at_path(const char *storage_path, const DbMigration *migrations, int migration_count, int *out_has_pending) {
+static int migrate_has_pending_on_connection(DbConnection *conn, const DbMigration *migrations,
+                                               int migration_count, int *out_has_pending) {
     ActiveMigrationRegistry registry;
     int executed_versions[256];
     int executed_loaded = 0;
@@ -256,6 +295,65 @@ static int db_migrate_sqlite_has_pending_at_path(const char *storage_path, const
     int schema_exists;
     int sql_pending = 0;
     int has_pending = 0;
+
+    if (!conn || !out_has_pending) {
+        return -1;
+    }
+    if (!migrations && migration_count != 0) return -1;
+    if (migration_count < 0 || migration_count > 1024) return -1;
+
+    *out_has_pending = 0;
+
+    active_migration_registry_init(&registry);
+    for (i = 0; i < migration_count; ++i) {
+        if (active_migration_register(&registry, migrations[i].version, migrations[i].name, migrations[i].up) != 0) {
+            active_migration_registry_free(&registry);
+            return -1;
+        }
+    }
+
+    schema_exists = schema_migrations_table_exists(conn);
+    if (schema_exists < 0) {
+        active_migration_registry_free(&registry);
+        return -1;
+    }
+
+    if (schema_exists) {
+        executed_loaded = sqlite_load_executed(conn, executed_versions, (int)(sizeof(executed_versions) / sizeof(executed_versions[0])));
+        if (executed_loaded < 0) {
+            active_migration_registry_free(&registry);
+            return -1;
+        }
+        for (i = 0; i < executed_loaded; ++i) {
+            if (active_migration_mark_executed(&registry, executed_versions[i]) != 0) {
+                active_migration_registry_free(&registry);
+                return -1;
+            }
+        }
+    }
+
+    for (i = 0; i < registry.count; ++i) {
+        if (!active_migration_is_executed(&registry, registry.migrations[i].version)) {
+            has_pending = 1;
+            break;
+        }
+    }
+
+    if (db_sql_migrations_has_pending(conn, &sql_pending) != 0) {
+        active_migration_registry_free(&registry);
+        return -1;
+    }
+    if (sql_pending) {
+        has_pending = 1;
+    }
+
+    active_migration_registry_free(&registry);
+
+    *out_has_pending = has_pending;
+    return 0;
+}
+
+static int db_migrate_sqlite_has_pending_at_path(const char *storage_path, const DbMigration *migrations, int migration_count, int *out_has_pending) {
     DbConnection *conn = NULL;
 
     if (!storage_path || storage_path[0] == '\0' || !out_has_pending) {
@@ -275,58 +373,12 @@ static int db_migrate_sqlite_has_pending_at_path(const char *storage_path, const
         return -1;
     }
 
-    active_migration_registry_init(&registry);
-    for (i = 0; i < migration_count; ++i) {
-        if (active_migration_register(&registry, migrations[i].version, migrations[i].name, migrations[i].up) != 0) {
-            active_migration_registry_free(&registry);
-            db_connection_close(conn);
-            return -1;
-        }
-    }
-
-    schema_exists = sqlite_schema_migrations_exists(conn);
-    if (schema_exists < 0) {
-        active_migration_registry_free(&registry);
+    if (migrate_has_pending_on_connection(conn, migrations, migration_count, out_has_pending) != 0) {
         db_connection_close(conn);
         return -1;
     }
 
-    if (schema_exists) {
-        executed_loaded = sqlite_load_executed(conn, executed_versions, (int)(sizeof(executed_versions) / sizeof(executed_versions[0])));
-        if (executed_loaded < 0) {
-            active_migration_registry_free(&registry);
-            db_connection_close(conn);
-            return -1;
-        }
-        for (i = 0; i < executed_loaded; ++i) {
-            if (active_migration_mark_executed(&registry, executed_versions[i]) != 0) {
-                active_migration_registry_free(&registry);
-                db_connection_close(conn);
-                return -1;
-            }
-        }
-    }
-
-    for (i = 0; i < registry.count; ++i) {
-        if (!active_migration_is_executed(&registry, registry.migrations[i].version)) {
-            has_pending = 1;
-            break;
-        }
-    }
-
-    if (db_sql_migrations_has_pending(conn, &sql_pending) != 0) {
-        active_migration_registry_free(&registry);
-        db_connection_close(conn);
-        return -1;
-    }
-    if (sql_pending) {
-        has_pending = 1;
-    }
-
-    active_migration_registry_free(&registry);
     db_connection_close(conn);
-
-    *out_has_pending = has_pending;
     return 0;
 }
 
@@ -552,4 +604,18 @@ int db_migrate_default_has_pending(const char *storage_path, int *out_has_pendin
     }
 
     return db_migrate_has_pending(path, migrations, 2, out_has_pending);
+}
+
+int db_migrate_default_has_pending_conn(DbConnection *conn, int *out_has_pending) {
+    DbMigration migrations[2];
+
+    migrations[0].version = 1;
+    migrations[0].name = "init";
+    migrations[0].up = migration_1_up;
+
+    migrations[1].version = 2;
+    migrations[1].name = "second";
+    migrations[1].up = migration_2_up;
+
+    return migrate_has_pending_on_connection(conn, migrations, 2, out_has_pending);
 }

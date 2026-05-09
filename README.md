@@ -91,11 +91,15 @@ Cortex includes:
 - **Cache**: in-memory and external cache abstractions
 - **CLI**: the `cortex` command entrypoint
 - **App**: example application code (controllers, models, neural)
-- **DB**: SQLite-backed persistence (via `db_connection` + `db/sqlite/sqlite_adapter`)
+- **DB**: engine-agnostic `db_connection` API; **SQLite** is the default backend (`db/sqlite/sqlite_adapter.c`). **PostgreSQL** via **libpq** is optional at build time (`db/postgres/postgres_adapter.c` when `pkg-config libpq` succeeds).
 
-## Database (SQLite)
+## Database
 
-Cortex uses **SQLite as the default database**, in the spirit of Rails: **zero YAML**, **convention over configuration**, and a project that runs after `cortex new` without manual DB setup.
+Cortex uses **SQLite as the default database**, in the spirit of Rails: **zero YAML**, **convention over configuration**, and a project that runs after `cortex new` without manual DB setup. **PostgreSQL is fully optional**: unless you opt in with environment variables, behavior matches the historical SQLite-only workflow.
+
+### SQLite (default)
+
+No extra system libraries are required beyond the bundled SQLite amalgamation. The `make` output line `[cortex] PostgreSQL adapter disabled` indicates a normal SQLite-only build when libpq is not installed.
 
 ### Convention (paths and environment)
 
@@ -110,12 +114,107 @@ Cortex uses **SQLite as the default database**, in the spirit of Rails: **zero Y
 
 ### Architecture
 
-- **`db/db_connection.h`** — Small, engine-agnostic API: connect, `exec`, prepared statements (`prepare` / `step` / `bind_int` / `column_int` / `finalize`), close. Call sites should depend on this header, not on SQLite directly.
-- **`db/sqlite/sqlite_adapter.c`** — Implements that API with the SQLite C API (`sqlite3.h`).
+- **`db/db_connection.h`** — Engine-agnostic API: `db_connection_open` (SQLite file path), `exec`, prepared statements (`prepare` / `step` / `bind_*` / `column_*` / `finalize`), `db_connection_close`. Use **`db_connection_backend()`** to distinguish SQLite vs PostgreSQL when implementing portability shims (migrations do this internally).
+- **`db/sqlite/sqlite_adapter.c`** — Default implementation: SQLite via `sqlite3.h`, registered through the internal vtable used by `db_connection.c`.
+- **`db/postgres/postgres_adapter.h`** (when built with `-DCORTEX_HAVE_POSTGRES`) — **`postgres_connect(const char *connstring)`**, **`postgres_connect_from_env()`** for pool/bootstrap. Prepared statements accept Cortex’s SQLite-style **`?` placeholders**; the adapter rewrites them to PostgreSQL **`$1`…`$n`**.
 - **`db/db_bootstrap.h`** — Application lifecycle:
-  - **`cortex_db_bootstrap()`** — Checks pending migrations before boot; if any are pending, it prints guidance to run **`cortex db:migrate`** and aborts startup. When up to date, it opens a **single** process-wide connection via **`cortex_db_init()`** (reuse across requests in the same process).
-  - **`cortex_db_shutdown()`** — Closes the connection on exit.
-  - **`cortex_db_exec(const char *sql)`** — Convenience wrapper around the active connection (for migrations or app code that runs SQL strings).
+  - **`cortex_db_env_wants_postgresql()`** — Returns whether **`DATABASE_URL`** (scheme `postgres` / `postgresql`) or **`DB_ADAPTER=postgresql`** selects PostgreSQL for this process.
+  - **`cortex_db_bootstrap()`** — Checks pending migrations before boot (SQLite file path, or a short-lived PostgreSQL probe connection when PG is selected). On failure after a PostgreSQL probe, the last Cortex error is printed. When up to date, **`cortex_db_init()`** initializes the connection pool.
+  - **`cortex_db_shutdown()`** — Closes pool connections on exit.
+  - **`cortex_db_exec(const char *sql)`** — Executes SQL on a pooled connection.
+
+### PostgreSQL (optional)
+
+PostgreSQL support is compiled in **only** when **`pkg-config --exists libpq`** succeeds. The Makefile adds `-DCORTEX_HAVE_POSTGRES`, `libpq` CFLAGS/LDFLAGS, and links **`-lpq`**. If libpq is missing, Cortex builds exactly as before (SQLite only); you will see `[cortex] PostgreSQL adapter disabled — libpq not found`.
+
+#### Installing libpq
+
+**Ubuntu / Debian**
+
+```bash
+sudo apt-get install libpq-dev
+```
+
+**macOS (Homebrew)**
+
+```bash
+brew install libpq
+```
+
+Follow Homebrew’s notes to expose `pkg-config` and `libpq` on your `PATH` if `pkg-config libpq` does not resolve.
+
+#### Opt-in environment variables
+
+| Variable | Role |
+|----------|------|
+| **`DB_ADAPTER`** | Set to **`postgresql`** to select PostgreSQL when no `DATABASE_URL` is used. |
+| **`DATABASE_URL`** | If the URL starts with **`postgres`** or **`postgresql`**, Cortex uses PostgreSQL (libpq connection string / URI). |
+| **`PGHOST`**, **`PGPORT`**, **`PGDATABASE`**, **`PGUSER`**, **`PGPASSWORD`** | Standard libpq variables; used by **`PQconnectdb("")`** and when building a connection from env. |
+| **`CORE_ENV`** | When **`PGDATABASE`** is **not** set, **`postgres_connect_from_env()`** derives a database name **`${app}_${CORE_ENV}`** (e.g. `cortex_development`), where **`app`** is sanitized from the current working directory basename. **`CORE_ENV`** defaults to **`development`**. |
+
+SQLite path conventions (`db/<env>.sqlite3`) are unchanged when PostgreSQL is not selected.
+
+#### Usage examples
+
+**Adapter + libpq env (no `DATABASE_URL`):**
+
+```bash
+export DB_ADAPTER=postgresql
+export PGHOST=localhost
+export PGUSER=postgres
+export PGPASSWORD=secret
+make server
+```
+
+**Connection URI:**
+
+```bash
+DATABASE_URL=postgresql://postgres:secret@localhost:5432/blog_development make server
+```
+
+**Run tests against PostgreSQL** (optional integration — skipped if unset or unreachable):
+
+```bash
+CORE_ENV=test DB_ADAPTER=postgresql CORTEX_TEST_PG=1 make test
+```
+
+Ensure the target database exists and credentials match. Tests that need a live server **noop** when `CORTEX_TEST_PG` is unset so CI stays stable.
+
+#### Migration portability
+
+Include **`active/active_migration.h`** (wraps **`core/active_migration.h`**) for portable SQL fragments:
+
+| Macro | SQLite | PostgreSQL |
+|-------|--------|------------|
+| **`SQL_PK`** | `INTEGER PRIMARY KEY AUTOINCREMENT` | `SERIAL PRIMARY KEY` |
+| **`SQL_NOW`** | `CURRENT_TIMESTAMP` | `NOW()` |
+| **`SQL_BOOL`** | `INTEGER` | `BOOLEAN` |
+| **`SQL_DATETIME`** | `TEXT` | `TIMESTAMPTZ` |
+
+Example:
+
+```c
+db_connection_exec(db,
+    "CREATE TABLE posts ("
+    "  id " SQL_PK ","
+    "  title VARCHAR(255) NOT NULL,"
+    "  created_at " SQL_DATETIME " DEFAULT " SQL_NOW
+    ");"
+);
+```
+
+**`db_schema_write_dump()`** (SQLite `sqlite_master` dump) is a no-op on PostgreSQL so `cortex db:migrate` does not fail when mixing backends.
+
+#### Backend overview
+
+```
+DbConnection / DbStatement  →  db_connection_*() API
+         ↓
+   SQLite adapter  |  PostgreSQL adapter (optional)
+   sqlite3.c       |  libpq
+```
+
+Models, controllers, and Active helpers use **`db_connection_*`** only; they do not depend on a specific engine unless you branch on **`db_connection_backend()`** for maintenance tasks.
 
 ### Migrations
 
@@ -140,7 +239,7 @@ Alternate forms: `cortex db create`, `cortex db migrate`.
 
 ### Building the framework and SQLite
 
-- `libcortex.a` embeds the official **[SQLite amalgamation](https://www.sqlite.org/amalgamation.html)** (`sqlite3.c`) so **generated apps only link** `-lcortex -lm` (no separate `-lsqlite3` on the app).
+- `libcortex.a` embeds the official **[SQLite amalgamation](https://www.sqlite.org/amalgamation.html)** (`sqlite3.c`) so **generated apps only link** `-lcortex -lm` for SQLite-only builds (no separate `-lsqlite3` on the app). When the Makefile enables PostgreSQL, **`libpq` is also linked** (`-lpq` via `pkg-config`). **Apps that link a `libcortex.a` built with PostgreSQL support** (for example `sqapp` or custom binaries) must pass the **same `-lpq`** on the link line or they will see unresolved `PQ*` symbols.
 - On the **first** `make` in the Cortex repo, `vendor/sqlite/sqlite3.c` (and headers) are fetched by **`scripts/fetch-sqlite-amalgamation.sh`** (requires network once). The script is idempotent; large files are listed in `.gitignore` so clones stay small.
 - Offline: run the script after copying the amalgamation into `vendor/sqlite/`, or unpack the official zip there.
 

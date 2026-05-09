@@ -1,11 +1,17 @@
 #include "db_pool.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "../core/core_config.h"
 #include "cortex_error.h"
+#include "db_bootstrap.h"
 #include "db_paths.h"
+
+#ifdef CORTEX_HAVE_POSTGRES
+#include "postgres/postgres_adapter.h"
+#endif
 
 static DbPool g_db_pool;
 static int g_db_pool_initialized;
@@ -35,6 +41,11 @@ static int db_pool_apply_pragmas(DbConnection *conn) {
         CORTEX_SET_ERROR(CORTEX_ERR_INVALID_ARGUMENT, "db:db_pool_apply_pragmas",
                          "Connection handle is NULL");
         return -1;
+    }
+
+    if (db_connection_backend(conn) != CORTEX_DB_BACKEND_SQLITE) {
+        cortex_clear_error();
+        return 0;
     }
 
     journal_mode = core_config_get_string("db.journal_mode", "WAL");
@@ -180,6 +191,85 @@ int db_pool_init(DbPool *pool, const char *db_path, int size) {
     return 0;
 }
 
+#ifdef CORTEX_HAVE_POSTGRES
+static int db_pool_init_postgresql(DbPool *pool, int size)
+{
+    int i;
+    int real_size;
+
+    if (!pool) {
+        CORTEX_SET_ERROR(CORTEX_ERR_INVALID_ARGUMENT, "db:db_pool_init_postgresql",
+                         "Invalid pool pointer");
+        return -1;
+    }
+
+    real_size = db_pool_clamp_size(size);
+    memset(pool, 0, sizeof(*pool));
+
+    if (pthread_mutex_init(&pool->pool_lock, NULL) != 0) {
+        CORTEX_SET_ERROR(CORTEX_ERR_UNKNOWN, "db:db_pool_init_postgresql",
+                         "pthread_mutex_init failed for pool lock");
+        return -1;
+    }
+    if (pthread_cond_init(&pool->slot_available, NULL) != 0) {
+        (void)pthread_mutex_destroy(&pool->pool_lock);
+        CORTEX_SET_ERROR(CORTEX_ERR_UNKNOWN, "db:db_pool_init_postgresql",
+                         "pthread_cond_init failed for pool condition");
+        return -1;
+    }
+
+    pool->size = real_size;
+    pool->db_path = "postgresql";
+
+    for (i = 0; i < pool->size; i++) {
+        const char *url = getenv("DATABASE_URL");
+        DbConnection *c = NULL;
+
+        if (pthread_mutex_init(&pool->slots[i].lock, NULL) != 0) {
+            int j;
+            for (j = 0; j < i; j++) {
+                if (pool->slots[j].conn) {
+                    db_connection_close(pool->slots[j].conn);
+                    pool->slots[j].conn = NULL;
+                }
+                (void)pthread_mutex_destroy(&pool->slots[j].lock);
+            }
+            (void)pthread_cond_destroy(&pool->slot_available);
+            (void)pthread_mutex_destroy(&pool->pool_lock);
+            CORTEX_SET_ERROR(CORTEX_ERR_UNKNOWN, "db:db_pool_init_postgresql",
+                             "pthread_mutex initialization failed while building pool slots");
+            return -1;
+        }
+
+        if (url && strncmp(url, "postgres", 8) == 0) {
+            c = postgres_connect(url);
+        } else {
+            c = postgres_connect_from_env();
+        }
+
+        if (!c) {
+            int j;
+            (void)pthread_mutex_destroy(&pool->slots[i].lock);
+            for (j = 0; j < i; j++) {
+                if (pool->slots[j].conn) {
+                    db_connection_close(pool->slots[j].conn);
+                    pool->slots[j].conn = NULL;
+                }
+                (void)pthread_mutex_destroy(&pool->slots[j].lock);
+            }
+            (void)pthread_cond_destroy(&pool->slot_available);
+            (void)pthread_mutex_destroy(&pool->pool_lock);
+            return -1;
+        }
+
+        pool->slots[i].conn = c;
+    }
+
+    cortex_clear_error();
+    return 0;
+}
+#endif /* CORTEX_HAVE_POSTGRES */
+
 void db_pool_shutdown(DbPool *pool) {
     int i;
 
@@ -276,18 +366,41 @@ int cortex_db_pool_init(int size) {
         return 0;
     }
 
-    if (db_path_for_environment(NULL, g_db_pool_path, sizeof(g_db_pool_path)) != 0) {
-        CORTEX_SET_ERROR(CORTEX_ERR_IO, "db:cortex_db_pool_init",
-                         "Unable to derive database filesystem path");
-        return -1;
-    }
-
-    if (db_pool_init(&g_db_pool, g_db_pool_path, size) != 0) {
-        if (!cortex_has_error()) {
-            CORTEX_SET_ERRORF(CORTEX_ERR_DB_CONNECT, "db:cortex_db_pool_init",
-                              "Failed to initialize connection pool for '%s'", g_db_pool_path);
+    if (cortex_db_env_wants_postgresql()) {
+#ifdef CORTEX_HAVE_POSTGRES
+        if (snprintf(g_db_pool_path, sizeof(g_db_pool_path), "(postgresql)") >= (int)sizeof(g_db_pool_path)) {
+            CORTEX_SET_ERROR(CORTEX_ERR_IO, "db:cortex_db_pool_init",
+                             "PostgreSQL pool path marker overflow");
+            return -1;
         }
+
+        if (db_pool_init_postgresql(&g_db_pool, size) != 0) {
+            if (!cortex_has_error()) {
+                CORTEX_SET_ERROR(CORTEX_ERR_DB_CONNECT, "db:cortex_db_pool_init",
+                                 "Failed to initialize PostgreSQL connection pool");
+            }
+            return -1;
+        }
+#else
+        CORTEX_SET_ERROR(CORTEX_ERR_NOT_IMPLEMENTED, "db:cortex_db_pool_init",
+                         "PostgreSQL was requested (DATABASE_URL / DB_ADAPTER) but this build lacks libpq; "
+                         "install libpq-dev and rebuild, or unset those variables to use SQLite");
         return -1;
+#endif
+    } else {
+        if (db_path_for_environment(NULL, g_db_pool_path, sizeof(g_db_pool_path)) != 0) {
+            CORTEX_SET_ERROR(CORTEX_ERR_IO, "db:cortex_db_pool_init",
+                             "Unable to derive database filesystem path");
+            return -1;
+        }
+
+        if (db_pool_init(&g_db_pool, g_db_pool_path, size) != 0) {
+            if (!cortex_has_error()) {
+                CORTEX_SET_ERRORF(CORTEX_ERR_DB_CONNECT, "db:cortex_db_pool_init",
+                                  "Failed to initialize connection pool for '%s'", g_db_pool_path);
+            }
+            return -1;
+        }
     }
     g_db_pool_initialized = 1;
     cortex_clear_error();

@@ -2,6 +2,7 @@
 #define DB_MIGRATE_H
 
 #include "../core/active_migration.h"
+#include "db_connection.h"
 
 /* Single migration definition used by the migration runner. */
 typedef struct {
@@ -29,6 +30,9 @@ int db_migrate_has_pending(const char *storage_path, const DbMigration *migratio
 /* Convenience default migrations for this scaffold. NULL path selects the default SQLite file. */
 int db_migrate_default(const char *storage_path);
 int db_migrate_default_has_pending(const char *storage_path, int *out_has_pending);
+
+/* Same default migration set as db_migrate_default_has_pending, using an existing connection. */
+int db_migrate_default_has_pending_conn(DbConnection *conn, int *out_has_pending);
 
 #endif /* DB_MIGRATE_H */
 

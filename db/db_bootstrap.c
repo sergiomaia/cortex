@@ -7,13 +7,36 @@
 #include "db_paths.h"
 #include "db_pool.h"
 
+#include <stdlib.h>
+#include <string.h>
+
+#ifdef CORTEX_HAVE_POSTGRES
+#include "postgres/postgres_adapter.h"
+#endif
+
 static DbConnection *g_db;
 
-DbConnection *cortex_db_connection(void) {
+int cortex_db_env_wants_postgresql(void)
+{
+    const char *db_url = getenv("DATABASE_URL");
+    const char *ad = getenv("DB_ADAPTER");
+
+    if (db_url && strncmp(db_url, "postgres", 8) == 0) {
+        return 1;
+    }
+    if (ad && strcmp(ad, "postgresql") == 0) {
+        return 1;
+    }
+    return 0;
+}
+
+DbConnection *cortex_db_connection(void)
+{
     return g_db;
 }
 
-int cortex_db_exec(const char *sql) {
+int cortex_db_exec(const char *sql)
+{
     DbConnection *conn;
     int rc;
 
@@ -34,7 +57,8 @@ int cortex_db_exec(const char *sql) {
     return rc;
 }
 
-int cortex_db_init(void) {
+int cortex_db_init(void)
+{
     int pool_size;
     DbConnection *conn;
 
@@ -67,12 +91,14 @@ int cortex_db_init(void) {
     return 0;
 }
 
-void cortex_db_shutdown(void) {
+void cortex_db_shutdown(void)
+{
     g_db = NULL;
     cortex_db_pool_shutdown();
 }
 
-int cortex_db_bootstrap(void) {
+int cortex_db_bootstrap(void)
+{
     char path[512];
     int has_pending = 0;
 
@@ -83,25 +109,62 @@ int cortex_db_bootstrap(void) {
         return -1;
     }
 
-    if (db_path_for_environment(NULL, path, sizeof(path)) != 0) {
-        CORTEX_SET_ERROR(CORTEX_ERR_IO, "db:cortex_db_bootstrap",
-                         "Failed to resolve database path for environment");
-        return -1;
-    }
+    if (cortex_db_env_wants_postgresql()) {
+#ifdef CORTEX_HAVE_POSTGRES
+        DbConnection *probe = NULL;
+        const char *db_url = getenv("DATABASE_URL");
 
-    if (db_migrate_default_has_pending(path, &has_pending) != 0) {
-        if (!cortex_has_error()) {
-            CORTEX_SET_ERRORF(CORTEX_ERR_DB_EXEC, "db:cortex_db_bootstrap",
-                              "Unable to inspect migration state for '%s'", path);
+        if (db_url && strncmp(db_url, "postgres", 8) == 0) {
+            probe = postgres_connect(db_url);
+        } else {
+            probe = postgres_connect_from_env();
         }
+        if (!probe) {
+            cortex_err_print(cortex_last_error());
+            return -1;
+        }
+        if (db_migrate_default_has_pending_conn(probe, &has_pending) != 0) {
+            db_connection_close(probe);
+            if (!cortex_has_error()) {
+                CORTEX_SET_ERROR(CORTEX_ERR_DB_EXEC, "db:cortex_db_bootstrap",
+                                 "Unable to inspect PostgreSQL migration state");
+            }
+            return -1;
+        }
+        db_connection_close(probe);
+        if (has_pending) {
+            CORTEX_SET_ERROR(
+                CORTEX_ERR_DB_MIGRATION_PENDING, "db:cortex_db_bootstrap",
+                "Pending migrations for PostgreSQL — run `cortex db:migrate` before starting the server");
+            return -1;
+        }
+#else
+        CORTEX_SET_ERROR(
+            CORTEX_ERR_NOT_IMPLEMENTED, "db:cortex_db_bootstrap",
+            "PostgreSQL was requested (DATABASE_URL / DB_ADAPTER) but this binary was built without libpq");
         return -1;
-    }
-    if (has_pending) {
-        CORTEX_SET_ERRORF(
-            CORTEX_ERR_DB_MIGRATION_PENDING, "db:cortex_db_bootstrap",
-            "Pending migrations for '%s' - run `cortex db:migrate` before starting the server",
-            path);
-        return -1;
+#endif
+    } else {
+        if (db_path_for_environment(NULL, path, sizeof(path)) != 0) {
+            CORTEX_SET_ERROR(CORTEX_ERR_IO, "db:cortex_db_bootstrap",
+                             "Failed to resolve database path for environment");
+            return -1;
+        }
+
+        if (db_migrate_default_has_pending(path, &has_pending) != 0) {
+            if (!cortex_has_error()) {
+                CORTEX_SET_ERRORF(CORTEX_ERR_DB_EXEC, "db:cortex_db_bootstrap",
+                                  "Unable to inspect migration state for '%s'", path);
+            }
+            return -1;
+        }
+        if (has_pending) {
+            CORTEX_SET_ERRORF(
+                CORTEX_ERR_DB_MIGRATION_PENDING, "db:cortex_db_bootstrap",
+                "Pending migrations for '%s' - run `cortex db:migrate` before starting the server",
+                path);
+            return -1;
+        }
     }
 
     return cortex_db_init();
