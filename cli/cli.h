@@ -20,6 +20,9 @@
  *   cortex db:migrate
  *   cortex db:create
  *
+ * PostgreSQL is optional: same `new` / generators as SQLite; select PG at runtime
+ * with DATABASE_URL or DB_ADAPTER=postgresql after building with libpq (see README).
+ *
  * The public API is kept tiny so tests can exercise parsing and
  * dispatching without spawning a real server process.
  */

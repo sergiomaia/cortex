@@ -1,7 +1,9 @@
 #ifndef SQLITE_ADAPTER_H
 #define SQLITE_ADAPTER_H
 
-/* SQLite implementation of db_connection.h — included for tests or
- * direct sqlite3_errmsg access if needed. Prefer db_connection_* API. */
+#include "../db_connection.h"
+
+/* Open a SQLite database at `path` and wrap it as a DbConnection. */
+int cortex_sqlite_connection_open(const char *path, DbConnection **out);
 
 #endif /* SQLITE_ADAPTER_H */

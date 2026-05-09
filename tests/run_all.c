@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 void run_db_connection_tests(void);
+void run_postgres_adapter_tests(void);
 void run_db_pool_tests(void);
 void run_active_model_tests(void);
 void run_active_record_tests(void);
@@ -26,6 +27,7 @@ int main(void) {
     printf("==================\n");
 
     run_db_connection_tests();
+    run_postgres_adapter_tests();
 
     run_active_model_tests();
     run_active_record_tests();

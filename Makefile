@@ -18,6 +18,19 @@ else
 COVERAGE_LIBS :=
 endif
 
+# Optional PostgreSQL (libpq). When absent, the build omits db/postgres/postgres_adapter.c.
+HAVE_PG := $(shell pkg-config --exists libpq 2>/dev/null && echo yes)
+
+ifeq ($(HAVE_PG),yes)
+  PG_CFLAGS  := $(shell pkg-config --cflags libpq)
+  PG_LDFLAGS := $(shell pkg-config --libs   libpq)
+  CFLAGS     += $(PG_CFLAGS) -DCORTEX_HAVE_POSTGRES
+  LDFLAGS    += $(PG_LDFLAGS)
+  $(info [cortex] PostgreSQL adapter enabled)
+else
+  $(info [cortex] PostgreSQL adapter disabled — libpq not found)
+endif
+
 # The first explicit rule in this file must not steal the default goal from 'all'.
 .DEFAULT_GOAL := all
 
@@ -28,6 +41,9 @@ CACHE_SRCS := $(wildcard cache/*.c)
 GUARD_SRCS := $(wildcard guard/*.c)
 FORGE_SRCS := $(wildcard forge/*.c)
 DB_SRCS := $(wildcard db/*.c) $(wildcard db/sqlite/*.c)
+ifeq ($(HAVE_PG),yes)
+  DB_SRCS += db/postgres/postgres_adapter.c
+endif
 APP_SRCS := $(wildcard app/*/*.c) $(wildcard app/*/*/*.c)
 # Always include config/routes.c (register_routes); wildcard alone omits it if the file is missing.
 CONFIG_SRCS := config/routes.c $(filter-out config/routes.c,$(wildcard config/*.c))

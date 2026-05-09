@@ -721,6 +721,17 @@ int cli_run(int argc, char **argv) {
         fprintf(stderr, "  %s dev\n", argv[0]);
         fprintf(stderr, "  %s db:migrate\n", argv[0]);
         fprintf(stderr, "  %s db:create\n", argv[0]);
+        fprintf(stderr, "\n");
+        fprintf(stderr,
+                "PostgreSQL (optional — same `new` / generate workflow as SQLite; enable at run time):\n");
+        fprintf(stderr,
+                "  Build Cortex with libpq installed so `pkg-config libpq` succeeds (see README).\n");
+        fprintf(stderr,
+                "  Set DATABASE_URL=postgresql://user:pass@host:5432/dbname or DB_ADAPTER=postgresql\n");
+        fprintf(stderr,
+                "  plus PGHOST, PGUSER, PGPASSWORD, PGDATABASE (and PGPORT if needed).\n");
+        fprintf(stderr,
+                "  Create the database on PostgreSQL, then run `db:migrate` and `server`/`dev` with the same env.\n");
         return -1;
     }
     return cli_dispatch(&parsed);

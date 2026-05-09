@@ -14,7 +14,7 @@ static int ensure_sql_migration_table(DbConnection *conn) {
     return db_connection_exec(conn, ddl);
 }
 
-static int sql_migration_table_exists(DbConnection *conn) {
+static int sql_migration_table_exists_sqlite(DbConnection *conn) {
     DbStatement *st = NULL;
     int step;
     int exists = 0;
@@ -34,6 +34,39 @@ static int sql_migration_table_exists(DbConnection *conn) {
     }
     db_statement_finalize(st);
     return exists;
+}
+
+static int sql_migration_table_exists_postgres(DbConnection *conn) {
+    DbStatement *st = NULL;
+    int step;
+    int exists = 0;
+
+    if (db_connection_prepare(
+            conn,
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_name = 'cortex_sql_migrations'",
+            &st) != 0) {
+        return -1;
+    }
+    step = db_statement_step(st);
+    if (step == 1) {
+        exists = 1;
+    } else if (step < 0) {
+        db_statement_finalize(st);
+        return -1;
+    }
+    db_statement_finalize(st);
+    return exists;
+}
+
+static int sql_migration_table_exists(DbConnection *conn) {
+    if (!conn) {
+        return -1;
+    }
+    if (db_connection_backend(conn) == CORTEX_DB_BACKEND_POSTGRESQL) {
+        return sql_migration_table_exists_postgres(conn);
+    }
+    return sql_migration_table_exists_sqlite(conn);
 }
 
 static int sql_migration_executed(DbConnection *conn, const char *name) {
@@ -301,6 +334,11 @@ int db_schema_write_dump(DbConnection *conn, const char *schema_path) {
 
     if (!conn || !schema_path) {
         return -1;
+    }
+
+    if (db_connection_backend(conn) == CORTEX_DB_BACKEND_POSTGRESQL) {
+        /* sqlite_master-based dump is SQLite-specific; do not fail db:migrate. */
+        return 0;
     }
 
     if (db_connection_prepare(
