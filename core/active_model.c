@@ -3,11 +3,15 @@
 
 #include "active_model.h"
 
+#include "cortex_error.h"
+
 static int ensure_fields_capacity(ActiveModel *model) {
     int new_capacity;
     ActiveModelField *new_fields;
 
     if (!model) {
+        CORTEX_SET_ERROR(CORTEX_ERR_INVALID_ARGUMENT, "active:active_model.ensure_fields_capacity",
+                         "ActiveModel pointer is NULL");
         return -1;
     }
 
@@ -21,6 +25,8 @@ static int ensure_fields_capacity(ActiveModel *model) {
 
     new_fields = (ActiveModelField *)realloc(model->fields, (size_t)new_capacity * sizeof(ActiveModelField));
     if (!new_fields) {
+        CORTEX_SET_ERROR(CORTEX_ERR_CORE_OOM, "active:active_model.ensure_fields_capacity",
+                         "unable to grow dynamic field backing store");
         return -1;
     }
 
@@ -44,7 +50,9 @@ void active_model_init(ActiveModel *model, int id) {
 int active_model_set_field(ActiveModel *model, const char *key, const char *value) {
     int i;
 
-    if (!model || !key) {
+    if (!model || !key || key[0] == '\0') {
+        CORTEX_SET_ERROR(CORTEX_ERR_ACTIVE_VALIDATION, "active:active_model_set_field",
+                         "field key is required");
         return -1;
     }
 
@@ -52,6 +60,7 @@ int active_model_set_field(ActiveModel *model, const char *key, const char *valu
     for (i = 0; i < model->field_count; ++i) {
         if (model->fields[i].key && strcmp(model->fields[i].key, key) == 0) {
             model->fields[i].value = value;
+            cortex_clear_error();
             return 0;
         }
     }
@@ -64,6 +73,7 @@ int active_model_set_field(ActiveModel *model, const char *key, const char *valu
     model->fields[model->field_count].value = value;
     model->field_count += 1;
 
+    cortex_clear_error();
     return 0;
 }
 

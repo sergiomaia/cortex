@@ -1,5 +1,6 @@
 #include "../test_assert.h"
 #include "../../core/active_model.h"
+#include "../../core/cortex_error.h"
 
 void test_active_model_init_sets_id_and_starts_empty(void) {
     ActiveModel model;
@@ -28,6 +29,17 @@ void test_active_model_set_and_get_fields(void) {
 
     ASSERT_STR_EQ(name_value, "Alice");
     ASSERT_STR_EQ(role_value, "admin");
+}
+
+void test_active_model_empty_field_keys_are_rejected(void) {
+    ActiveModel model;
+
+    active_model_init(&model, 7);
+    cortex_clear_error();
+
+    ASSERT_TRUE(active_model_set_field(&model, "", "nope") != 0);
+    ASSERT_TRUE(cortex_has_error());
+    ASSERT_EQ(cortex_last_error()->code, (long)CORTEX_ERR_ACTIVE_VALIDATION);
 }
 
 void test_active_model_update_existing_field(void) {

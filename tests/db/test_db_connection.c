@@ -1,4 +1,5 @@
 #include "../../db/db_connection.h"
+#include "../../core/cortex_error.h"
 #include "../cortex_test.h"
 
 #include <stdlib.h>
@@ -74,12 +75,18 @@ static void test_connect_invalid_path(void) {
     DbConnection *bad = NULL;
     CT_ASSERT_NEQ(db_connection_open("/nonexistent_cortex_path_99/sub/db.sqlite3", &bad), 0);
     CT_ASSERT_NULL(bad);
+    CT_ASSERT_EQ(cortex_has_error(), 1);
+    CT_ASSERT_EQ(cortex_last_error()->code, CORTEX_ERR_DB_CONNECT);
+    cortex_clear_error();
 }
 
 static void test_connect_rejects_empty_path(void) {
     DbConnection *bad = NULL;
     CT_ASSERT_NEQ(db_connection_open("", &bad), 0);
     CT_ASSERT_NULL(bad);
+    CT_ASSERT_EQ(cortex_has_error(), 1);
+    CT_ASSERT_EQ(cortex_last_error()->code, CORTEX_ERR_INVALID_ARGUMENT);
+    cortex_clear_error();
 }
 
 static void test_close_null_safe(void) {

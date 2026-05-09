@@ -31,6 +31,12 @@ extern int _ct_total;
 #endif
 
 /* ──────────────────────────────────────────
+   Thread-local errors (cortex_error.h)
+
+   Callers can assert on `cortex_has_error()`, `cortex_last_error()->code`, and
+   `cortex_last_error()->source` after failed operations. Use `cortex_clear_error()`
+   between cases when a clean assertion surface is required.
+
    Assertions
    ────────────────────────────────────────── */
 #define CT_ASSERT(expr) do { \

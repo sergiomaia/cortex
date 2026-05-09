@@ -2,16 +2,22 @@
 
 #include "flow.h"
 
+#include "../core/cortex_error.h"
+
 static int flow_queue_grow(FlowQueue *queue, int new_capacity) {
     FlowJob *new_items;
     int i;
 
     if (!queue || new_capacity <= 0) {
+        CORTEX_SET_ERROR(CORTEX_ERR_INVALID_ARGUMENT, "flow:flow_queue_grow",
+                         "queue pointer or target capacity invalid");
         return -1;
     }
 
     new_items = (FlowJob *)malloc((size_t)new_capacity * sizeof(FlowJob));
     if (!new_items) {
+        CORTEX_SET_ERROR(CORTEX_ERR_CORE_OOM, "flow:flow_queue_grow",
+                         "unable to grow job queue (allocation failed)");
         return -1;
     }
 
@@ -59,6 +65,8 @@ int flow_queue_enqueue(FlowQueue *queue, FlowJob job) {
     int insert_idx;
 
     if (!queue || !job.fn) {
+        CORTEX_SET_ERROR(CORTEX_ERR_INVALID_ARGUMENT, "flow:flow_queue_enqueue",
+                         "queue pointer and callback are required");
         return -1;
     }
 
@@ -74,6 +82,7 @@ int flow_queue_enqueue(FlowQueue *queue, FlowJob job) {
     queue->items[insert_idx] = job;
     queue->tail = (queue->tail + 1) % queue->capacity;
     queue->count += 1;
+    cortex_clear_error();
     return 0;
 }
 
@@ -108,6 +117,8 @@ int flow_worker_dispatch(FlowWorker *worker) {
     FlowJob job;
 
     if (!worker || !worker->queue) {
+        CORTEX_SET_ERROR(CORTEX_ERR_INVALID_ARGUMENT, "flow:flow_worker_dispatch",
+                         "worker requires a backing queue pointer");
         return -1;
     }
 
@@ -117,6 +128,7 @@ int flow_worker_dispatch(FlowWorker *worker) {
         executed += 1;
     }
 
+    cortex_clear_error();
     return executed;
 }
 

@@ -2,11 +2,13 @@
 
 void test_active_model_init_sets_id_and_starts_empty(void);
 void test_active_model_set_and_get_fields(void);
+void test_active_model_empty_field_keys_are_rejected(void);
 void test_active_model_update_existing_field(void);
 
 CT_SUITE_BEGIN(active_model)
     CT_TEST(test_active_model_init_sets_id_and_starts_empty)
     CT_TEST(test_active_model_set_and_get_fields)
+    CT_TEST(test_active_model_empty_field_keys_are_rejected)
     CT_TEST(test_active_model_update_existing_field)
 CT_SUITE_END()
 

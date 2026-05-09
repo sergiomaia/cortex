@@ -13,8 +13,10 @@ DbConnection *cortex_db_connection(void);
 /* Convenience for migrations and app code (uses the active connection). */
 int cortex_db_exec(const char *sql);
 
-/* Open DB only when migrations are up to date for this environment.
- * Returns -1 and prints guidance when pending migrations are detected. */
+/*
+ * Open DB only when migrations are up to date for this environment.
+ * Returns -1 on bootstrap failure with a populated thread-local Cortex error.
+ */
 int cortex_db_bootstrap(void);
 
 #endif /* DB_BOOTSTRAP_H */
