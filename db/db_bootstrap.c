@@ -76,7 +76,7 @@ int cortex_db_bootstrap(void) {
     char path[512];
     int has_pending = 0;
 
-    if (core_secret_init() != 0) {
+    if (cortex_secret_init() != 0) {
         CORTEX_SET_ERROR(
             CORTEX_ERR_UNKNOWN, "db:cortex_db_bootstrap",
             "secret bootstrap failed (set SECRET_KEY_BASE or config/secret.key for production)");
