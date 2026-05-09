@@ -471,6 +471,6 @@ Contributions are welcome.
 Please open an issue for bugs or feature requests, and submit pull requests
 with your improvements.
 
-# ### License
+### License
 Cortex is released under the [MIT License](LICENSE).
 Copyright (c) 2026 Sergio Maia
