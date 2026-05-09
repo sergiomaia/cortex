@@ -1,11 +1,78 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "../db_connection.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <sqlite3.h>
 
 #include "cortex_error.h"
+#include "pulse.h"
+
+/*
+ * Slow-query threshold in milliseconds. Queries that complete faster than
+ * this are logged at DEBUG level; anything slower is logged at WARN level so
+ * operators can spot regressions without digging through trace output.
+ */
+#define SQLITE_SLOW_QUERY_MS 100
+
+static long sqlite_elapsed_ms(const struct timespec *start,
+                              const struct timespec *end)
+{
+    long ms;
+
+    ms  = (long)(end->tv_sec  - start->tv_sec)  * 1000L;
+    ms += (long)(end->tv_nsec - start->tv_nsec) / 1000000L;
+    if (ms < 0) {
+        ms = 0;
+    }
+    return ms;
+}
+
+static void sqlite_log_query_outcome(const char *sql,
+                                     long elapsed_ms,
+                                     int rc,
+                                     const char *errmsg)
+{
+    char rc_buf[16];
+    char dur_buf[24];
+
+    snprintf(rc_buf,  sizeof(rc_buf),  "%d",   rc);
+    snprintf(dur_buf, sizeof(dur_buf), "%ldms", elapsed_ms);
+
+    if (rc != SQLITE_OK) {
+        pulse_log_fields(PULSE_ERROR,
+                         "db.sqlite",
+                         "query failed",
+                         "sql",      sql ? sql : "",
+                         "duration", dur_buf,
+                         "rc",       rc_buf,
+                         "error",    errmsg ? errmsg : "(unknown)",
+                         NULL);
+        return;
+    }
+
+    if (elapsed_ms > SQLITE_SLOW_QUERY_MS) {
+        pulse_log_fields(PULSE_WARN,
+                         "db.sqlite",
+                         "slow query",
+                         "sql",      sql ? sql : "",
+                         "duration", dur_buf,
+                         "rc",       rc_buf,
+                         NULL);
+    } else {
+        pulse_log_fields(PULSE_DEBUG,
+                         "db.sqlite",
+                         "query ok",
+                         "sql",      sql ? sql : "",
+                         "duration", dur_buf,
+                         "rc",       rc_buf,
+                         NULL);
+    }
+}
 
 struct DbConnection {
     sqlite3 *handle;
@@ -90,6 +157,9 @@ int db_connection_exec(DbConnection *conn, const char *sql)
 {
     char *errmsg = NULL;
     int rc;
+    struct timespec t_start;
+    struct timespec t_end;
+    long elapsed_ms;
 
     if (!conn || !conn->handle || !sql) {
         CORTEX_SET_ERROR(CORTEX_ERR_INVALID_ARGUMENT, "sqlite:db_connection_exec",
@@ -97,10 +167,15 @@ int db_connection_exec(DbConnection *conn, const char *sql)
         return -1;
     }
 
+    clock_gettime(CLOCK_MONOTONIC, &t_start);
     rc = sqlite3_exec(conn->handle, sql, NULL, NULL, &errmsg);
+    clock_gettime(CLOCK_MONOTONIC, &t_end);
+    elapsed_ms = sqlite_elapsed_ms(&t_start, &t_end);
+
     if (rc != SQLITE_OK) {
         CortexErrCode classification = sqlite_exec_rc_classify(rc);
         const char *em = errmsg ? errmsg : sqlite3_errmsg(conn->handle);
+        sqlite_log_query_outcome(sql, elapsed_ms, rc, em);
         CORTEX_SET_ERRORF(classification, "sqlite:db_connection_exec", "%s (SQLite rc=%d)",
                           em ? em : "(no message)", rc);
         if (errmsg) {
@@ -108,6 +183,7 @@ int db_connection_exec(DbConnection *conn, const char *sql)
         }
         return -1;
     }
+    sqlite_log_query_outcome(sql, elapsed_ms, SQLITE_OK, NULL);
     cortex_clear_error();
     return 0;
 }
@@ -127,8 +203,10 @@ int db_connection_prepare(DbConnection *conn, const char *sql, DbStatement **out
     rc = sqlite3_prepare_v2(conn->handle, sql, -1, &st, NULL);
     if (rc != SQLITE_OK) {
         CortexErrCode classification = sqlite_prepare_rc_classify(rc);
+        const char *em = sqlite3_errmsg(conn->handle);
+        sqlite_log_query_outcome(sql, 0, rc, em);
         CORTEX_SET_ERRORF(classification, "sqlite:db_connection_prepare",
-                          "Prepare failed: %s (SQLite rc=%d)", sqlite3_errmsg(conn->handle), rc);
+                          "Prepare failed: %s (SQLite rc=%d)", em, rc);
         return -1;
     }
 
@@ -165,8 +243,17 @@ int db_statement_step(DbStatement *stmt)
     }
     {
         CortexErrCode classification = sqlite_exec_rc_classify(rc);
+        const char *em = sqlite3_errmsg(sqlite3_db_handle(stmt->stmt));
+        char rc_buf[16];
+        snprintf(rc_buf, sizeof(rc_buf), "%d", rc);
+        pulse_log_fields(PULSE_ERROR,
+                         "db.sqlite",
+                         "step failed",
+                         "rc",    rc_buf,
+                         "error", em ? em : "(unknown)",
+                         NULL);
         CORTEX_SET_ERRORF(classification, "sqlite:db_statement_step", "%s (SQLite rc=%d)",
-                          sqlite3_errmsg(sqlite3_db_handle(stmt->stmt)), rc);
+                          em, rc);
         return -1;
     }
 }

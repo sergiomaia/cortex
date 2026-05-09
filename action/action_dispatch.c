@@ -1,7 +1,10 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -14,6 +17,54 @@
 #include "action_assets.h"
 #include "action_request_form.h"
 #include "../core/core_config.h"
+#include "../core/pulse.h"
+
+static long action_elapsed_ms(const struct timespec *start,
+                              const struct timespec *end)
+{
+    long ms;
+
+    ms  = (long)(end->tv_sec  - start->tv_sec)  * 1000L;
+    ms += (long)(end->tv_nsec - start->tv_nsec) / 1000000L;
+    if (ms < 0) {
+        ms = 0;
+    }
+    return ms;
+}
+
+/*
+ * Emit one Rails-style "request completed" record per dispatch, mapping HTTP
+ * status families to Pulse levels: 2xx/3xx → INFO, 4xx → WARN, 5xx → ERROR.
+ */
+static void action_log_request(const char *method,
+                               const char *path,
+                               int status,
+                               long elapsed_ms)
+{
+    char status_buf[16];
+    char duration_buf[24];
+    PulseLevel level;
+
+    if (status >= 500) {
+        level = PULSE_ERROR;
+    } else if (status >= 400) {
+        level = PULSE_WARN;
+    } else {
+        level = PULSE_INFO;
+    }
+
+    snprintf(status_buf,   sizeof(status_buf),   "%d",   status);
+    snprintf(duration_buf, sizeof(duration_buf), "%ldms", elapsed_ms);
+
+    pulse_log_fields(level,
+                     "action",
+                     "request completed",
+                     "method",   method ? method : "?",
+                     "path",     path   ? path   : "?",
+                     "status",   status_buf,
+                     "duration", duration_buf,
+                     NULL);
+}
 
 #define HTTP_REQ_MAX 65536
 
@@ -158,10 +209,14 @@ int action_dispatch(ActionRouter *router, ActionRequest *req, ActionResponse *re
     ActionHandler handler;
     const char *effective_method;
     char method_override[16];
+    struct timespec t_start;
+    struct timespec t_end;
+    long elapsed_ms;
     int i;
     if (!router || !req || !res) {
         return -1;
     }
+    clock_gettime(CLOCK_MONOTONIC, &t_start);
     effective_method = req->method;
     if (req->method && strcmp(req->method, "POST") == 0 &&
         req->body && req->body[0] &&
@@ -179,9 +234,15 @@ int action_dispatch(ActionRouter *router, ActionRequest *req, ActionResponse *re
     handler = action_router_match(router, effective_method, req->path);
     if (!handler) {
         action_response_set(res, 404, "Not Found");
+        clock_gettime(CLOCK_MONOTONIC, &t_end);
+        elapsed_ms = action_elapsed_ms(&t_start, &t_end);
+        action_log_request(effective_method, req->path, 404, elapsed_ms);
         return -1;
     }
     action_middleware_dispatch(handler, req, res);
+    clock_gettime(CLOCK_MONOTONIC, &t_end);
+    elapsed_ms = action_elapsed_ms(&t_start, &t_end);
+    action_log_request(effective_method, req->path, res->status, elapsed_ms);
     return 0;
 }
 

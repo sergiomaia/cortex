@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "pulse.h"
+
 static _Thread_local CortexError _tl_error;
 
 static void cortex_error_truncate_str(char *dst, size_t dst_cap, const char *src)
@@ -186,17 +188,32 @@ const char *cortex_err_code_str(CortexErrCode code)
 
 void cortex_err_print(const CortexError *err)
 {
+    char at_buf[CORTEX_ERR_SRC_MAX + 32];
+    char errno_buf[16];
+    const char *msg;
+    const char *source;
+
     if (!err || err->code == CORTEX_ERR_NONE) {
         return;
     }
 
-    fprintf(stderr,
-            "[cortex:error] %s (%s) at %s:%d - %s (errno=%d)\n",
-            cortex_err_code_str(err->code),
-            err->source[0] ? err->source : "?",
-            err->file ? err->file : "?",
-            err->line,
-            err->message[0] ? err->message : "",
-            err->sys_errno);
-    fflush(stderr);
+    msg    = err->message[0] ? err->message : "(no message)";
+    source = err->source[0]  ? err->source  : "?";
+
+    snprintf(at_buf,    sizeof(at_buf),    "%s:%d", err->file ? err->file : "?", err->line);
+    snprintf(errno_buf, sizeof(errno_buf), "%d",    err->sys_errno);
+
+    /*
+     * Convert the raw CortexError into a structured Pulse event. Routing all
+     * framework errors through Pulse keeps observability backends consistent
+     * (NDJSON in production, Rails-like text in development).
+     */
+    pulse_log_fields(PULSE_ERROR,
+                     "cortex.error",
+                     msg,
+                     "code",   cortex_err_code_str(err->code),
+                     "source", source,
+                     "at",     at_buf,
+                     "errno",  errno_buf,
+                     NULL);
 }
