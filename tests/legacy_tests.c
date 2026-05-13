@@ -116,6 +116,13 @@ void test_db_create_creates_db_folder_and_storage_file(void);
 void test_db_migrate_runs_pending_and_tracks_executed(void);
 void test_db_migrate_default_has_pending_tracks_sql_files(void);
 void test_db_migration_generator_creates_timestamped_file_with_up_down(void);
+void test_migration_sql_parse_valid_sections(void);
+void test_migration_sql_parse_optional_down(void);
+void test_migration_sql_parse_rejects_missing_up(void);
+void test_migration_sql_parse_semicolon_in_string(void);
+void test_db_migration_scan_ignores_invalid_names(void);
+void test_db_migration_apply_and_rollback_sqlite(void);
+void test_db_migration_transaction_rolls_back_on_bad_sql(void);
 void test_db_pool_initialization_and_clamped_size(void);
 void test_db_pool_acquire_release_and_reuse(void);
 void test_db_pool_acquire_multiple_connections(void);
@@ -326,6 +333,13 @@ void run_legacy_tests(void) {
     test_db_migrate_runs_pending_and_tracks_executed();
     test_db_migrate_default_has_pending_tracks_sql_files();
     test_db_migration_generator_creates_timestamped_file_with_up_down();
+    test_migration_sql_parse_valid_sections();
+    test_migration_sql_parse_optional_down();
+    test_migration_sql_parse_rejects_missing_up();
+    test_migration_sql_parse_semicolon_in_string();
+    test_db_migration_scan_ignores_invalid_names();
+    test_db_migration_apply_and_rollback_sqlite();
+    test_db_migration_transaction_rolls_back_on_bad_sql();
 
     test_cli_parse_server_command();
     test_cli_parse_version_command();

@@ -3,12 +3,11 @@
 
 #include "db_connection.h"
 
-/* Run pending *.sql files in db/migrate/ (lexicographic order). Tracked in
- * table cortex_sql_migrations (name TEXT PRIMARY KEY). */
+/* Run pending *.sql files in db/migrate/ (or CORTEX_MIGRATE_DIR), lexicographic order.
+ * Versions are recorded in schema_migrations (see db_migration_schema). */
 int db_sql_migrations_run(DbConnection *conn);
 
-/* Detect if there are pending *.sql files in db/migrate/ that were not
- * recorded in cortex_sql_migrations yet.
+/* Detect pending *.sql migrations not yet recorded in schema_migrations.
  *
  * out_has_pending: 1 if pending migrations exist, 0 otherwise.
  */

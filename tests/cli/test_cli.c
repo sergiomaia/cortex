@@ -865,6 +865,7 @@ void test_forge_new_creates_main_c_and_makefile(void) {
     snprintf(path, sizeof(path), "%s/Makefile", project_name);
     ASSERT_TRUE(file_exists(path));
     ASSERT_TRUE(file_contains(path, "server: cortex_app assets-build"));
+    ASSERT_TRUE(file_contains(path, "PG_LDFLAGS"));
     ASSERT_TRUE(file_contains(path, "$(CORTEX_ROOT)/cortex assets:build"));
     ASSERT_TRUE(file_contains(path, "$(CORTEX_ROOT)/cortex dev"));
     snprintf(path, sizeof(path), "%s/package.json", project_name);

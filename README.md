@@ -119,7 +119,7 @@ No extra system libraries are required beyond the bundled SQLite amalgamation. T
 - **`db/postgres/postgres_adapter.h`** (when built with `-DCORTEX_HAVE_POSTGRES`) — **`postgres_connect(const char *connstring)`**, **`postgres_connect_from_env()`** for pool/bootstrap. Prepared statements accept Cortex’s SQLite-style **`?` placeholders**; the adapter rewrites them to PostgreSQL **`$1`…`$n`**.
 - **`db/db_bootstrap.h`** — Application lifecycle:
   - **`cortex_db_env_wants_postgresql()`** — Returns whether **`DATABASE_URL`** (scheme `postgres` / `postgresql`) or **`DB_ADAPTER=postgresql`** selects PostgreSQL for this process.
-  - **`cortex_db_bootstrap()`** — Checks pending migrations before boot (SQLite file path, or a short-lived PostgreSQL probe connection when PG is selected). On failure after a PostgreSQL probe, the last Cortex error is printed. When up to date, **`cortex_db_init()`** initializes the connection pool.
+  - **`cortex_db_bootstrap()`** — Runs migrations automatically in **non-production** (`CORE_ENV` unset, `development`, `test`, etc.): SQLite via **`db_migrate_default()`**, PostgreSQL via **`db_migrate_default_on_connection()`** on a short-lived probe connection. In **production**, pending migrations are **not** applied; a **`LOG_WARN`** entry reminds you to run **`cortex db:migrate`**, then **`cortex_db_init()`** opens the pool. On hard failure the thread-local Cortex error is set.
   - **`cortex_db_shutdown()`** — Closes pool connections on exit.
   - **`cortex_db_exec(const char *sql)`** — Executes SQL on a pooled connection.
 
@@ -218,24 +218,45 @@ Models, controllers, and Active helpers use **`db_connection_*`** only; they do 
 
 ### Migrations
 
-- **Default (SQLite):** executed versions are stored in the **`schema_migrations`** table (`version INTEGER PRIMARY KEY`).
-- **Legacy:** if the migration “storage” path ends with **`.json`**, the older JSON array format is still supported (mainly for tests); new apps should use SQLite paths only.
-- **`db_migrate()`** / **`db_migrate_default()`** — Register C `up` callbacks (`DbMigration` + `active_migration_*`). Passing **`NULL`** as the path selects the default SQLite file for the current environment.
-- **`db/db_migration_generator.c`** — Can generate stub migration files under `db/migrations/` (convention for future SQL-based workflows).
+Cortex supports **two complementary migration mechanisms** (SQL files are primary; C callbacks remain for backward compatibility):
 
-### CLI
+1. **SQL file migrations (Rails-style, recommended)** — files under **`db/migrate/`** named **`YYYYMMDDHHMMSS_snake_case_description.sql`**. Each file uses section markers:
+   - **`-- migrate:up`** (required): SQL applied when migrating forward.
+   - **`-- migrate:down`** (optional): SQL applied on rollback; if omitted, `cortex db:rollback` logs a warning and skips that version.
+   - Text before the first marker is ignored. Multiple statements are supported; the runner splits on `;` outside quotes, line comments (`--`), block comments (`/* */`), escaped quotes, and PostgreSQL **dollar-quoted** strings. **Limitation:** semicolons inside unquoted PL/pgSQL bodies can still split incorrectly—use dollar-quoting for functions and triggers.
+   - Override the directory with **`CORTEX_MIGRATE_DIR`**.
+2. **C callback migrations (`CORTEX_MIGRATION` / `DbMigration`)** — versioned `up` functions registered in code. Still supported unchanged; versions are stored in the same **`schema_migrations`** table using **14-digit zero-padded** numeric strings that sort **before** timestamp versions (below sentinel **`19900101000000`**).
 
-| Command            | Behavior |
-|--------------------|----------|
-| `cortex db:create` | Creates **`db/`** and the default SQLite file for the current **`CORE_ENV`** (no path argument). |
-| `cortex db:migrate` | Runs pending migrations against that same default database. |
+**Precedence and coexistence:** On each `db:migrate` run, **C callbacks run first**, then **SQL file migrations** (lexicographic order by version string). Both record rows in **`schema_migrations`**. Legacy databases with **`schema_migrations(version INTEGER)`** or the old **`cortex_sql_migrations`** table are **upgraded automatically** on first access. JSON storage (path ending in **`.json`**) remains for tests only.
 
-Alternate forms: `cortex db create`, `cortex db migrate`.
+**API highlights:**
+
+- **`db_migrate()`** / **`db_migrate_default()`** — SQLite file path or legacy JSON; opens a connection, runs C registry + SQL files, then writes **`db/schema.sql`** on SQLite only.
+- **`db_migrate_on_connection()`** / **`db_migrate_default_on_connection()`** — Same pipeline on an existing **`DbConnection`** (used for PostgreSQL bootstrap and tooling).
+- **`db_migration_migrate_sql_files()`**, **`db_migration_rollback_sql_files()`**, **`db_migration_status_sql_files()`**, **`db_migration_generate()`** — see **`db/db_migration_runner.h`**, **`db/db_migration_parser.h`**, **`db/db_migration_schema.h`**.
+
+**`schema_migrations` table (unified):** `version` (TEXT, 14-char timestamp or padded C version), `name`, `applied_at` (`SQL_DATETIME` / `SQL_NOW` via backend-appropriate DDL in **`db_migration_schema.c`**).
+
+**C generator note:** **`db/db_migration_generator.c`** still generates **C stubs** under **`db/migrations/`** for historical workflows. Prefer **`cortex generate migration <name>`** for new **`.sql`** files in **`db/migrate/`**.
+
+### CLI (database)
+
+| Command | Behavior |
+|---------|----------|
+| `cortex db:create` | Creates **`db/`** and the default SQLite file for the current **`CORE_ENV`**. |
+| `cortex db:migrate` | Runs pending **C + SQL** migrations (SQLite path, or PostgreSQL when **`DATABASE_URL`** / **`DB_ADAPTER=postgresql`** is set and the binary was built with libpq). |
+| `cortex db:rollback [N]` | Rolls back the last **N** SQL file migrations (default **1**). Uses each file’s **`-- migrate:down`** section inside a transaction. |
+| `cortex db:status` | Lists migration files and **up** / **down** state. |
+| `cortex generate migration <name>` | Creates a timestamped **`.sql`** stub under **`db/migrate/`** (snake_case **name**). |
+
+Alternate forms: `cortex db create`, `cortex db migrate`, `cortex db rollback [N]`, `cortex db status`.
 
 ### New projects (`cortex new`)
 
 - Creates **`db/`** and **`db/development.sqlite3`** immediately (empty database file).
-- Generated **`main.c`** includes **`db/db_bootstrap.h`** and calls **`cortex_db_bootstrap()`** before serving, and **`cortex_db_shutdown()`** when the server loop ends. Boot now fails fast when migrations are pending, matching the Rails-style warning flow.
+- Generated **`main.c`** includes **`db/db_bootstrap.h`** and calls **`cortex_db_bootstrap()`** before serving, and **`cortex_db_shutdown()`** when the server loop ends.
+- **Development / test (`CORE_ENV` not `production`):** **`cortex_db_bootstrap()`** runs **`db_migrate_default()`** (SQLite) or **`db_migrate_default_on_connection()`** (PostgreSQL) so the schema is brought up automatically; failure **aborts** startup.
+- **Production:** pending migrations **do not** run automatically; **`LOG_WARN`** reminds you to run **`cortex db:migrate`**, then the pool initializes.
 
 ### Building the framework and SQLite
 

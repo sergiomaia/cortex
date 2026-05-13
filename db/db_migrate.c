@@ -3,13 +3,18 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
 #include "db_paths.h"
+#include "db_migration_schema.h"
 #include "sql_migrate.h"
+
+static int migration_1_up(void);
+static int migration_2_up(void);
 
 static int ensure_dir(const char *path) {
     if (!path || path[0] == '\0') return -1;
@@ -158,11 +163,91 @@ static int persist_executed_versions_json(const char *storage_path, const Active
 }
 
 static int sqlite_ensure_schema(DbConnection *conn) {
-    static const char *ddl =
-        "CREATE TABLE IF NOT EXISTS schema_migrations (\n"
-        "  version INTEGER PRIMARY KEY NOT NULL\n"
-        ");";
-    return db_connection_exec(conn, ddl);
+    return db_migration_ensure_table(conn);
+}
+
+static const char *migration_name_for_version(const DbMigration *migrations, int migration_count, int version) {
+    int i;
+    for (i = 0; i < migration_count; ++i) {
+        if (migrations[i].version == version) {
+            return migrations[i].name ? migrations[i].name : "";
+        }
+    }
+    return "";
+}
+
+static int sqlite_load_executed(DbConnection *conn, int *out_versions, int out_cap) {
+    DbStatement *st = NULL;
+    int count = 0;
+
+    if (!conn || !out_versions || out_cap <= 0) {
+        return -1;
+    }
+
+    if (db_connection_prepare(
+            conn,
+            "SELECT version FROM schema_migrations WHERE version < '19900101000000' ORDER BY version ASC",
+            &st) != 0) {
+        return -1;
+    }
+
+    while (1) {
+        int step = db_statement_step(st);
+        const char *vtext;
+        char *endp;
+        long vlong;
+
+        if (step == 0) {
+            break;
+        }
+        if (step < 0) {
+            db_statement_finalize(st);
+            return -1;
+        }
+        vtext = db_statement_column_text(st, 0);
+        if (!vtext) {
+            db_statement_finalize(st);
+            return -1;
+        }
+        errno = 0;
+        vlong = strtol(vtext, &endp, 10);
+        if (errno != 0 || endp == vtext || *endp != '\0' || vlong <= 0 || vlong > (long)INT_MAX) {
+            db_statement_finalize(st);
+            return -1;
+        }
+        if (count < out_cap) {
+            out_versions[count++] = (int)vlong;
+        }
+    }
+
+    db_statement_finalize(st);
+    return count;
+}
+
+static int sqlite_sync_executed(DbConnection *conn, const ActiveMigrationRegistry *registry,
+                                const DbMigration *migrations, int migration_count) {
+    int i;
+    char verbuf[16];
+
+    if (!conn || !registry) {
+        return -1;
+    }
+
+    if (db_connection_exec(conn, "DELETE FROM schema_migrations WHERE version < '19900101000000'") != 0) {
+        return -1;
+    }
+
+    for (i = 0; i < registry->executed_count; ++i) {
+        const char *nm = migration_name_for_version(migrations, migration_count, registry->executed_versions[i]);
+        if (db_migration_format_callback_version(registry->executed_versions[i], verbuf, sizeof(verbuf)) != 0) {
+            return -1;
+        }
+        if (db_migration_mark_applied(conn, verbuf, nm) != 0) {
+            return -1;
+        }
+    }
+
+    return 0;
 }
 
 static int sqlite_schema_migrations_exists(DbConnection *conn) {
@@ -230,60 +315,6 @@ static int schema_migrations_table_exists(DbConnection *conn) {
         return postgres_schema_migrations_exists(conn);
     }
     return sqlite_schema_migrations_exists(conn);
-}
-
-static int sqlite_load_executed(DbConnection *conn, int *out_versions, int out_cap) {
-    DbStatement *st = NULL;
-    int count = 0;
-
-    if (!conn || !out_versions || out_cap <= 0) {
-        return -1;
-    }
-
-    if (db_connection_prepare(conn, "SELECT version FROM schema_migrations ORDER BY version ASC", &st) != 0) {
-        return -1;
-    }
-
-    while (1) {
-        int step = db_statement_step(st);
-        if (step == 0) {
-            break;
-        }
-        if (step < 0) {
-            db_statement_finalize(st);
-            return -1;
-        }
-        if (count < out_cap) {
-            out_versions[count++] = db_statement_column_int(st, 0);
-        }
-    }
-
-    db_statement_finalize(st);
-    return count;
-}
-
-static int sqlite_sync_executed(DbConnection *conn, const ActiveMigrationRegistry *registry) {
-    int i;
-
-    if (!conn || !registry) {
-        return -1;
-    }
-
-    if (db_connection_exec(conn, "DELETE FROM schema_migrations") != 0) {
-        return -1;
-    }
-
-    for (i = 0; i < registry->executed_count; ++i) {
-        char sql[128];
-        if (snprintf(sql, sizeof(sql), "INSERT INTO schema_migrations (version) VALUES (%d)", registry->executed_versions[i]) >= (int)sizeof(sql)) {
-            return -1;
-        }
-        if (db_connection_exec(conn, sql) != 0) {
-            return -1;
-        }
-    }
-
-    return 0;
 }
 
 static int migrate_has_pending_on_connection(DbConnection *conn, const DbMigration *migrations,
@@ -382,32 +413,25 @@ static int db_migrate_sqlite_has_pending_at_path(const char *storage_path, const
     return 0;
 }
 
-static int db_migrate_sqlite_at_path(const char *storage_path, const DbMigration *migrations, int migration_count) {
+/* Runs C registry migrations + SQL file migrations on an already-open connection (SQLite or PostgreSQL). */
+int db_migrate_on_connection(DbConnection *conn, const DbMigration *migrations, int migration_count) {
     ActiveMigrationRegistry registry;
     int executed_versions[256];
     int executed_loaded;
     int rc;
     int i;
-    DbConnection *conn = NULL;
 
-    if (!storage_path || storage_path[0] == '\0') {
+    if (!conn) {
         return -1;
     }
-    if (!migrations && migration_count != 0) return -1;
-    if (migration_count < 0 || migration_count > 1024) return -1;
-
-    if (ensure_dir("db") != 0) return -1;
-
-    if (!file_exists(storage_path)) {
-        if (db_create(storage_path) != 0) return -1;
+    if (!migrations && migration_count != 0) {
+        return -1;
     }
-
-    if (db_connection_open(storage_path, &conn) != 0) {
+    if (migration_count < 0 || migration_count > 1024) {
         return -1;
     }
 
     if (sqlite_ensure_schema(conn) != 0) {
-        db_connection_close(conn);
         return -1;
     }
 
@@ -425,34 +449,79 @@ static int db_migrate_sqlite_at_path(const char *storage_path, const DbMigration
     for (i = 0; i < migration_count; ++i) {
         if (active_migration_register(&registry, migrations[i].version, migrations[i].name, migrations[i].up) != 0) {
             active_migration_registry_free(&registry);
-            db_connection_close(conn);
             return -1;
         }
     }
 
     rc = active_migration_run_pending(&registry);
 
-    if (sqlite_sync_executed(conn, &registry) != 0) {
+    if (sqlite_sync_executed(conn, &registry, migrations, migration_count) != 0) {
         active_migration_registry_free(&registry);
-        db_connection_close(conn);
         return -1;
     }
 
     active_migration_registry_free(&registry);
 
     if (db_sql_migrations_run(conn) != 0) {
-        db_connection_close(conn);
         return -1;
     }
 
-    if (db_schema_write_dump(conn, "db/schema.sql") != 0) {
-        fprintf(stderr, "db: warning: could not write db/schema.sql\n");
+    if (db_connection_backend(conn) == CORTEX_DB_BACKEND_SQLITE) {
+        if (db_schema_write_dump(conn, "db/schema.sql") != 0) {
+            fprintf(stderr, "db: warning: could not write db/schema.sql\n");
+        }
     }
 
-    db_connection_close(conn);
+    if (rc == 1) {
+        return 0;
+    }
+    return rc;
+}
 
-    /* Treat rc==1 ("nothing pending") as success. */
-    if (rc == 1) return 0;
+int db_migrate_default_on_connection(DbConnection *conn) {
+    DbMigration migrations[2];
+
+    migrations[0].version = 1;
+    migrations[0].name = "init";
+    migrations[0].up = migration_1_up;
+
+    migrations[1].version = 2;
+    migrations[1].name = "second";
+    migrations[1].up = migration_2_up;
+
+    return db_migrate_on_connection(conn, migrations, 2);
+}
+
+static int db_migrate_sqlite_at_path(const char *storage_path, const DbMigration *migrations, int migration_count) {
+    DbConnection *conn = NULL;
+    int rc;
+
+    if (!storage_path || storage_path[0] == '\0') {
+        return -1;
+    }
+    if (!migrations && migration_count != 0) {
+        return -1;
+    }
+    if (migration_count < 0 || migration_count > 1024) {
+        return -1;
+    }
+
+    if (ensure_dir("db") != 0) {
+        return -1;
+    }
+
+    if (!file_exists(storage_path)) {
+        if (db_create(storage_path) != 0) {
+            return -1;
+        }
+    }
+
+    if (db_connection_open(storage_path, &conn) != 0) {
+        return -1;
+    }
+
+    rc = db_migrate_on_connection(conn, migrations, migration_count);
+    db_connection_close(conn);
     return rc;
 }
 

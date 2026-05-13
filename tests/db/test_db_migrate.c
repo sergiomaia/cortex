@@ -141,7 +141,12 @@ void test_db_migrate_default_has_pending_tracks_sql_files(void) {
     remove_if_exists(migration_path);
 
     ASSERT_EQ(db_create(storage), 0);
-    ASSERT_EQ(write_file_from_string(migration_path, "CREATE TABLE pending_specs (id INTEGER PRIMARY KEY);\n"), 0);
+    ASSERT_EQ(write_file_from_string(migration_path,
+                                     "-- migrate:up\n"
+                                     "CREATE TABLE pending_specs (id INTEGER PRIMARY KEY);\n\n"
+                                     "-- migrate:down\n"
+                                     "DROP TABLE pending_specs;\n"),
+              0);
 
     ASSERT_EQ(db_migrate_default_has_pending(storage, &has_pending), 0);
     ASSERT_EQ(has_pending, 1);

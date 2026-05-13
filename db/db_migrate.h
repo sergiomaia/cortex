@@ -34,5 +34,11 @@ int db_migrate_default_has_pending(const char *storage_path, int *out_has_pendin
 /* Same default migration set as db_migrate_default_has_pending, using an existing connection. */
 int db_migrate_default_has_pending_conn(DbConnection *conn, int *out_has_pending);
 
+/* Apply pending C + SQL migrations on an open connection (used by bootstrap / PostgreSQL). */
+int db_migrate_on_connection(DbConnection *conn, const DbMigration *migrations, int migration_count);
+
+/* Same as db_migrate_default(NULL) but reuses `conn` (no SQLite path). */
+int db_migrate_default_on_connection(DbConnection *conn);
+
 #endif /* DB_MIGRATE_H */
 
