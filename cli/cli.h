@@ -18,7 +18,10 @@
  *   cortex generate neural:integration <name>
  *   cortex generate neural:policy <name>
  *   cortex db:migrate
+ *   cortex db:rollback [N]
+ *   cortex db:status
  *   cortex db:create
+ *   cortex generate migration <name>
  *
  * PostgreSQL is optional: same `new` / generators as SQLite; select PG at runtime
  * with DATABASE_URL or DB_ADAPTER=postgresql after building with libpq (see README).
@@ -50,7 +53,10 @@ typedef enum {
     CLI_COMMAND_DEV,
     CLI_COMMAND_ASSETS_BUILD,
     CLI_COMMAND_DB_MIGRATE,
-    CLI_COMMAND_DB_CREATE
+    CLI_COMMAND_DB_ROLLBACK,
+    CLI_COMMAND_DB_STATUS,
+    CLI_COMMAND_DB_CREATE,
+    CLI_COMMAND_GENERATE_MIGRATION
 } CliCommand;
 
 typedef struct {
@@ -59,6 +65,7 @@ typedef struct {
     const char **attributes; /* Used by generate scaffold. */
     int attribute_count; /* Number of entries in attributes. */
     int use_react; /* Used by generate scaffold; defaults to enabled. */
+    int db_rollback_steps; /* For db:rollback (default 1). */
 } CliParsed;
 
 /* Parse argv (including program name at argv[0]) into a CliParsed value.

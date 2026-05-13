@@ -7,10 +7,9 @@
 #include <errno.h>
 #include <sys/stat.h>
 
+#include "../forge/forge.h"
 #include "../forge/forge_generators.h"
-#include "../core/active_migration.h"
 #include "../db/db_create.h"
-#include "../db/db_migrate.h"
 #include "../action/action_dispatch.h"
 #include "../action/action_controller.h"
 #include "../action/action_router.h"
@@ -167,6 +166,7 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
     out->attributes = NULL;
     out->attribute_count = 0;
     out->use_react = 1;
+    out->db_rollback_steps = 1;
 
     /* argv[0] is the program name, argv[1] is the first word. */
     if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "version") == 0) {
@@ -354,6 +354,12 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
             return 0;
         }
 
+        if (argc == 4 && strcmp(argv[2], "migration") == 0) {
+            out->command = CLI_COMMAND_GENERATE_MIGRATION;
+            out->name = argv[3];
+            return 0;
+        }
+
         return -1;
     }
 
@@ -362,6 +368,41 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
             return -1;
         }
         out->command = CLI_COMMAND_DB_MIGRATE;
+        return 0;
+    }
+
+    if (strcmp(argv[1], "db:rollback") == 0) {
+        out->db_rollback_steps = 1;
+        if (argc == 2) {
+            out->command = CLI_COMMAND_DB_ROLLBACK;
+            return 0;
+        }
+        if (argc == 3) {
+            char *endp;
+            long v = strtol(argv[2], &endp, 10);
+            if (endp == argv[2] || *endp != '\0' || v < 1 || v > 10000) {
+                return -1;
+            }
+            out->db_rollback_steps = (int)v;
+            out->command = CLI_COMMAND_DB_ROLLBACK;
+            return 0;
+        }
+        return -1;
+    }
+
+    if (strcmp(argv[1], "db:status") == 0) {
+        if (argc != 2) {
+            return -1;
+        }
+        out->command = CLI_COMMAND_DB_STATUS;
+        return 0;
+    }
+
+    if (strcmp(argv[1], "db:create") == 0) {
+        if (argc != 2) {
+            return -1;
+        }
+        out->command = CLI_COMMAND_DB_CREATE;
         return 0;
     }
 
@@ -376,35 +417,42 @@ int cli_parse(int argc, char **argv, CliParsed *out) {
         return 0;
     }
 
-    /* Allow the alternate form: `cortex db migrate`. */
+    /* Allow `cortex db <subcommand>` forms. */
     if (strcmp(argv[1], "db") == 0) {
-        if (argc != 3) {
+        if (argc < 3) {
             return -1;
         }
-        if (strcmp(argv[2], "migrate") == 0) {
+        if (strcmp(argv[2], "migrate") == 0 && argc == 3) {
             out->command = CLI_COMMAND_DB_MIGRATE;
             return 0;
         }
-    }
-
-    if (strcmp(argv[1], "db:create") == 0) {
-        if (argc != 2) {
+        if (strcmp(argv[2], "rollback") == 0) {
+            out->db_rollback_steps = 1;
+            if (argc == 3) {
+                out->command = CLI_COMMAND_DB_ROLLBACK;
+                return 0;
+            }
+            if (argc == 4) {
+                char *endp;
+                long v = strtol(argv[3], &endp, 10);
+                if (endp == argv[3] || *endp != '\0' || v < 1 || v > 10000) {
+                    return -1;
+                }
+                out->db_rollback_steps = (int)v;
+                out->command = CLI_COMMAND_DB_ROLLBACK;
+                return 0;
+            }
             return -1;
         }
-        out->command = CLI_COMMAND_DB_CREATE;
-        return 0;
-    }
-
-    /* Allow the alternate form: `cortex db create`. */
-    if (strcmp(argv[1], "db") == 0) {
-        if (argc != 3) {
-            return -1;
+        if (strcmp(argv[2], "status") == 0 && argc == 3) {
+            out->command = CLI_COMMAND_DB_STATUS;
+            return 0;
         }
-        if (strcmp(argv[2], "create") != 0) {
-            return -1;
+        if (strcmp(argv[2], "create") == 0 && argc == 3) {
+            out->command = CLI_COMMAND_DB_CREATE;
+            return 0;
         }
-        out->command = CLI_COMMAND_DB_CREATE;
-        return 0;
+        return -1;
     }
 
     return -1;
@@ -609,7 +657,24 @@ static int cli_handle_dev(void) {
 
 static int cli_handle_db_migrate(void) {
     printf("db:migrate: running migrations\n");
-    return db_migrate_default(NULL);
+    return forge_db_migrate();
+}
+
+static int cli_handle_db_rollback(int steps) {
+    printf("db:rollback: rolling back %d migration(s)\n", steps);
+    return forge_db_rollback(steps);
+}
+
+static int cli_handle_db_status(void) {
+    return forge_db_status();
+}
+
+static int cli_handle_generate_migration(const char *name) {
+    if (!name || name[0] == '\0') {
+        return -1;
+    }
+    printf("generate migration: %s\n", name);
+    return forge_generate_migration(name);
 }
 
 static int cli_handle_db_create(void) {
@@ -664,12 +729,18 @@ int cli_dispatch(const CliParsed *parsed) {
         return cli_handle_generate_neural_policy(parsed->name);
     case CLI_COMMAND_GENERATE_STIMULUS:
         return cli_handle_generate_stimulus(parsed->name);
+    case CLI_COMMAND_GENERATE_MIGRATION:
+        return cli_handle_generate_migration(parsed->name);
     case CLI_COMMAND_DEV:
         return cli_handle_dev();
     case CLI_COMMAND_ASSETS_BUILD:
         return cli_handle_assets_build();
     case CLI_COMMAND_DB_MIGRATE:
         return cli_handle_db_migrate();
+    case CLI_COMMAND_DB_ROLLBACK:
+        return cli_handle_db_rollback(parsed->db_rollback_steps);
+    case CLI_COMMAND_DB_STATUS:
+        return cli_handle_db_status();
     case CLI_COMMAND_DB_CREATE:
         return cli_handle_db_create();
     default:
@@ -720,6 +791,8 @@ int cli_run(int argc, char **argv) {
         fprintf(stderr, "  %s assets:build\n", argv[0]);
         fprintf(stderr, "  %s dev\n", argv[0]);
         fprintf(stderr, "  %s db:migrate\n", argv[0]);
+        fprintf(stderr, "  %s db:rollback [N]\n", argv[0]);
+        fprintf(stderr, "  %s db:status\n", argv[0]);
         fprintf(stderr, "  %s db:create\n", argv[0]);
         fprintf(stderr, "\n");
         fprintf(stderr,

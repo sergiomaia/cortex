@@ -2,6 +2,7 @@
 
 #include "../core/core_config.h"
 #include "../core/core_secret.h"
+#include "../core/pulse.h"
 #include "cortex_error.h"
 #include "db_migrate.h"
 #include "db_paths.h"
@@ -15,6 +16,11 @@
 #endif
 
 static DbConnection *g_db;
+
+static int cortex_env_is_production(void) {
+    const char *env = getenv("CORE_ENV");
+    return env && strcmp(env, "production") == 0;
+}
 
 int cortex_db_env_wants_postgresql(void)
 {
@@ -101,6 +107,7 @@ int cortex_db_bootstrap(void)
 {
     char path[512];
     int has_pending = 0;
+    int is_prod = cortex_env_is_production();
 
     if (cortex_secret_init() != 0) {
         CORTEX_SET_ERROR(
@@ -123,20 +130,31 @@ int cortex_db_bootstrap(void)
             cortex_err_print(cortex_last_error());
             return -1;
         }
-        if (db_migrate_default_has_pending_conn(probe, &has_pending) != 0) {
-            db_connection_close(probe);
-            if (!cortex_has_error()) {
-                CORTEX_SET_ERROR(CORTEX_ERR_DB_EXEC, "db:cortex_db_bootstrap",
-                                 "Unable to inspect PostgreSQL migration state");
+
+        if (is_prod) {
+            if (db_migrate_default_has_pending_conn(probe, &has_pending) != 0) {
+                db_connection_close(probe);
+                if (!cortex_has_error()) {
+                    CORTEX_SET_ERROR(CORTEX_ERR_DB_EXEC, "db:cortex_db_bootstrap",
+                                     "Unable to inspect PostgreSQL migration state");
+                }
+                return -1;
             }
-            return -1;
-        }
-        db_connection_close(probe);
-        if (has_pending) {
-            CORTEX_SET_ERROR(
-                CORTEX_ERR_DB_MIGRATION_PENDING, "db:cortex_db_bootstrap",
-                "Pending migrations for PostgreSQL — run `cortex db:migrate` before starting the server");
-            return -1;
+            db_connection_close(probe);
+            if (has_pending) {
+                LOG_WARN("db.bootstrap",
+                         "Pending migrations for PostgreSQL — run `cortex db:migrate` before relying on the schema");
+            }
+        } else {
+            if (db_migrate_default_on_connection(probe) != 0) {
+                db_connection_close(probe);
+                if (!cortex_has_error()) {
+                    CORTEX_SET_ERROR(CORTEX_ERR_DB_EXEC, "db:cortex_db_bootstrap",
+                                     "Automatic PostgreSQL migration failed at boot");
+                }
+                return -1;
+            }
+            db_connection_close(probe);
         }
 #else
         CORTEX_SET_ERROR(
@@ -151,19 +169,27 @@ int cortex_db_bootstrap(void)
             return -1;
         }
 
-        if (db_migrate_default_has_pending(path, &has_pending) != 0) {
-            if (!cortex_has_error()) {
-                CORTEX_SET_ERRORF(CORTEX_ERR_DB_EXEC, "db:cortex_db_bootstrap",
-                                  "Unable to inspect migration state for '%s'", path);
+        if (is_prod) {
+            if (db_migrate_default_has_pending(path, &has_pending) != 0) {
+                if (!cortex_has_error()) {
+                    CORTEX_SET_ERRORF(CORTEX_ERR_DB_EXEC, "db:cortex_db_bootstrap",
+                                      "Unable to inspect migration state for '%s'", path);
+                }
+                return -1;
             }
-            return -1;
-        }
-        if (has_pending) {
-            CORTEX_SET_ERRORF(
-                CORTEX_ERR_DB_MIGRATION_PENDING, "db:cortex_db_bootstrap",
-                "Pending migrations for '%s' - run `cortex db:migrate` before starting the server",
-                path);
-            return -1;
+            if (has_pending) {
+                LOG_WARN("db.bootstrap",
+                         "Pending migrations for '%s' — run `cortex db:migrate` before relying on the schema",
+                         path);
+            }
+        } else {
+            if (db_migrate_default(NULL) != 0) {
+                if (!cortex_has_error()) {
+                    CORTEX_SET_ERRORF(CORTEX_ERR_DB_EXEC, "db:cortex_db_bootstrap",
+                                      "Automatic migration failed for '%s'", path);
+                }
+                return -1;
+            }
         }
     }
 

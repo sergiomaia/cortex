@@ -2325,9 +2325,11 @@ static int write_scaffold_sql_migration(const char *table_name, int attr_count, 
     }
 
     off = (size_t)snprintf(sql_buf, sizeof(sql_buf),
+                           "-- Migration: %s_create_%s\n\n"
+                           "-- migrate:up\n"
                            "CREATE TABLE %s (\n"
                            "  id INTEGER PRIMARY KEY AUTOINCREMENT",
-                           table_name);
+                           ts, table_name, table_name);
     if (off >= sizeof(sql_buf)) {
         return -1;
     }
@@ -2355,9 +2357,12 @@ static int write_scaffold_sql_migration(const char *table_name, int attr_count, 
     }
 
     off += (size_t)snprintf(sql_buf + off, sizeof(sql_buf) - off,
-                             ",\n  created_at DATETIME,\n"
-                             "  updated_at DATETIME\n"
-                             ");\n");
+                            ",\n  created_at DATETIME,\n"
+                            "  updated_at DATETIME\n"
+                            ");\n"
+                            "\n-- migrate:down\n"
+                            "DROP TABLE %s;\n",
+                            table_name);
     if (off >= sizeof(sql_buf)) {
         return -1;
     }
@@ -2760,8 +2765,13 @@ int forge_new_project(const char *project_name) {
         "CORTEX_ROOT ?= ..\n"
         "CFLAGS := -Wall -Wextra -std=c11 -I. -I$(CORTEX_ROOT) -I$(CORTEX_ROOT)/core -I$(CORTEX_ROOT)/action -I$(CORTEX_ROOT)/config\n"
         "APP_SRCS := main.c config/routes.c $(wildcard app/controllers/*.c) $(wildcard app/models/*.c) $(wildcard app/neural/*.c) $(wildcard app/neural/*/*.c)\n\n"
+        "# Link libpq when available so `-lcortex` resolves PQ* symbols if libcortex.a was built with PostgreSQL.\n"
+        "HAVE_PG := $(shell pkg-config --exists libpq 2>/dev/null && echo yes)\n"
+        "ifeq ($(HAVE_PG),yes)\n"
+        "  PG_LDFLAGS := $(shell pkg-config --libs libpq)\n"
+        "endif\n\n"
         "cortex_app: $(APP_SRCS)\n"
-        "\t$(CC) $(CFLAGS) $(APP_SRCS) -L$(CORTEX_ROOT) -lcortex -lm -o cortex_app\n\n"
+        "\t$(CC) $(CFLAGS) $(APP_SRCS) -L$(CORTEX_ROOT) -lcortex -lm $(PG_LDFLAGS) -o cortex_app\n\n"
         ".PHONY: all clean server dev assets-build\n"
         "all: cortex_app\n"
         "server: cortex_app assets-build\n"

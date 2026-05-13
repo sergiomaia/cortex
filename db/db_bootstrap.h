@@ -21,8 +21,14 @@ DbConnection *cortex_db_connection(void);
 int cortex_db_exec(const char *sql);
 
 /*
- * Open DB only when migrations are up to date for this environment.
- * Returns -1 on bootstrap failure with a populated thread-local Cortex error.
+ * Prepare secrets, reconcile migrations for the current environment, then open the pool.
+ *
+ * When CORE_ENV is production: pending migrations are not applied; a Pulse warning is
+ * emitted and startup continues after cortex_db_init().
+ *
+ * When CORE_ENV is unset, development, test, or any non-production value: migrations
+ * are applied automatically (SQLite via db_migrate_default, PostgreSQL via
+ * db_migrate_default_on_connection on a probe connection). Failure returns -1.
  */
 int cortex_db_bootstrap(void);
 
