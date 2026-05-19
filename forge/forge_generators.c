@@ -75,6 +75,53 @@ static int normalize_resource_names(const char *input,
 static int parse_attribute_key(const char *attr, char *out, size_t out_size);
 static int parse_attribute_type(const char *attr, char *out, size_t out_size);
 
+static const char *FORGE_CHTML_RENDER_HELPER =
+    "static int forge_render_chtml(ActionResponse *res, const char *view_name, CxContext *cx) {\n"
+    "    char html[256 * 1024];\n"
+    "    char *heap;\n"
+    "    size_t n;\n"
+    "    if (action_view_render(view_name, cx, html, (int)sizeof(html)) != 0) {\n"
+    "        action_response_set(res, 500, \"Template render error\");\n"
+    "        action_response_set_content_type(res, \"text/plain\");\n"
+    "        return -1;\n"
+    "    }\n"
+    "    n = strlen(html);\n"
+    "    heap = (char *)malloc(n + 1);\n"
+    "    if (!heap) {\n"
+    "        action_response_set(res, 500, \"Out of memory\");\n"
+    "        action_response_set_content_type(res, \"text/plain\");\n"
+    "        return -1;\n"
+    "    }\n"
+    "    memcpy(heap, html, n + 1);\n"
+    "    render_html(res, heap);\n"
+    "    return 0;\n"
+    "}\n\n";
+
+static const char *FORGE_APPLICATION_LAYOUT_CHTML =
+    "<!DOCTYPE html>\n"
+    "<html lang=\"en\">\n"
+    "<head>\n"
+    "  <meta charset=\"UTF-8\" />\n"
+    "  <title><%= cx_get(cx, \"page_title\") %> — <%= cx_get(cx, \"app_name\") %></title>\n"
+    "  <link rel=\"stylesheet\" href=\"/assets/stylesheets/application.css\" />\n"
+    "</head>\n"
+    "<body>\n"
+    "  <%== cx_yield(cx) %>\n"
+    "</body>\n"
+    "</html>\n";
+
+static int forge_emit_chtml_includes(ForgeStrBuf *b) {
+    if (forge_str_fmt(b,
+                      "#include \"cx_context.h\"\n"
+                      "#include <stdlib.h>\n"
+                      "#include <string.h>\n\n"
+                      "%s",
+                      FORGE_CHTML_RENDER_HELPER) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
 /* INSERT/UPDATE from form POST + redirect (see action_request_form + HTTP body in action_dispatch). */
 static int forge_emit_scaffold_create_update(ForgeStrBuf *b,
                                              const char *resource_plural,
@@ -472,6 +519,9 @@ static int forge_emit_scaffold_controller(ForgeStrBuf *b,
                       resource_plural) != 0) {
         return -1;
     }
+    if (forge_emit_chtml_includes(b) != 0) {
+        return -1;
+    }
 
     /* --- index --- */
     if (forge_str_fmt(b,
@@ -740,8 +790,20 @@ static int forge_emit_scaffold_controller(ForgeStrBuf *b,
 
     /* new, edit; create/update from POST body; delete stub */
     if (forge_str_fmt(b,
-                      "void %s_new(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/new\"); }\n"
-                      "void %s_edit(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/edit\"); }\n",
+                      "void %s_new(ActionRequest *req, ActionResponse *res) {\n"
+                      "    CxContext cx;\n"
+                      "    (void)req;\n"
+                      "    cx_init(&cx);\n"
+                      "    cx_set(&cx, \"page_title\", \"New\");\n"
+                      "    if (forge_render_chtml(res, \"%s/new\", &cx) != 0) return;\n"
+                      "}\n"
+                      "void %s_edit(ActionRequest *req, ActionResponse *res) {\n"
+                      "    CxContext cx;\n"
+                      "    (void)req;\n"
+                      "    cx_init(&cx);\n"
+                      "    cx_set(&cx, \"page_title\", \"Edit\");\n"
+                      "    if (forge_render_chtml(res, \"%s/edit\", &cx) != 0) return;\n"
+                      "}\n",
                       resource_plural,
                       resource_plural,
                       resource_plural,
@@ -818,6 +880,9 @@ static int forge_emit_scaffold_controller_react(ForgeStrBuf *b,
             resource_plural) != 0) {
         return -1;
     }
+    if (forge_emit_chtml_includes(b) != 0) {
+        return -1;
+    }
 
     if (forge_str_fmt(
             b,
@@ -847,7 +912,10 @@ static int forge_emit_scaffold_controller_react(ForgeStrBuf *b,
             "        return;\n"
             "    }\n"
             "    if (strstr(req->path, \".json\") == NULL) {\n"
-            "        render_view(res, \"%s/index\");\n"
+            "        CxContext cx;\n"
+            "        cx_init(&cx);\n"
+            "        cx_set(&cx, \"page_title\", \"Index\");\n"
+            "        if (forge_render_chtml(res, \"%s/index\", &cx) != 0) return;\n"
             "        return;\n"
             "    }\n"
             "    conn = cortex_db_connection();\n"
@@ -978,7 +1046,10 @@ static int forge_emit_scaffold_controller_react(ForgeStrBuf *b,
             "        return;\n"
             "    }\n"
             "    if (strstr(req->path, \".json\") == NULL) {\n"
-            "        render_view(res, \"%s/show\");\n"
+            "        CxContext cx;\n"
+            "        cx_init(&cx);\n"
+            "        cx_set(&cx, \"page_title\", \"Show\");\n"
+            "        if (forge_render_chtml(res, \"%s/show\", &cx) != 0) return;\n"
             "        return;\n"
             "    }\n"
             "    conn = cortex_db_connection();\n"
@@ -1076,8 +1147,20 @@ static int forge_emit_scaffold_controller_react(ForgeStrBuf *b,
 
     if (forge_str_fmt(
             b,
-            "void %s_new(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/new\"); }\n"
-            "void %s_edit(ActionRequest *req, ActionResponse *res) { (void)req; render_view(res, \"%s/edit\"); }\n",
+            "void %s_new(ActionRequest *req, ActionResponse *res) {\n"
+            "    CxContext cx;\n"
+            "    (void)req;\n"
+            "    cx_init(&cx);\n"
+            "    cx_set(&cx, \"page_title\", \"New\");\n"
+            "    if (forge_render_chtml(res, \"%s/new\", &cx) != 0) return;\n"
+            "}\n"
+            "void %s_edit(ActionRequest *req, ActionResponse *res) {\n"
+            "    CxContext cx;\n"
+            "    (void)req;\n"
+            "    cx_init(&cx);\n"
+            "    cx_set(&cx, \"page_title\", \"Edit\");\n"
+            "    if (forge_render_chtml(res, \"%s/edit\", &cx) != 0) return;\n"
+            "}\n",
             resource_plural,
             resource_plural,
             resource_plural,
@@ -1293,16 +1376,16 @@ int forge_generate_resource(const char *name) {
     }
     if (write_template_file(path, controller_buf) != 0) return -1;
 
-    if (snprintf(path, sizeof(path), "app/views/%s/index.html", resource_plural) < 0) return -1;
+    if (snprintf(path, sizeof(path), "app/views/%s/index.chtml", resource_plural) < 0) return -1;
     if (write_template_file(path, "<h1>Index</h1>\n<p>List all records here.</p>\n") != 0) return -1;
 
-    if (snprintf(path, sizeof(path), "app/views/%s/show.html", resource_plural) < 0) return -1;
+    if (snprintf(path, sizeof(path), "app/views/%s/show.chtml", resource_plural) < 0) return -1;
     if (write_template_file(path, "<h1>Show</h1>\n<p>Display one record here.</p>\n") != 0) return -1;
 
-    if (snprintf(path, sizeof(path), "app/views/%s/new.html", resource_plural) < 0) return -1;
+    if (snprintf(path, sizeof(path), "app/views/%s/new.chtml", resource_plural) < 0) return -1;
     if (write_template_file(path, "<h1>New</h1>\n<form method=\"POST\" action=\"\">\n  <button type=\"submit\">Create</button>\n</form>\n") != 0) return -1;
 
-    if (snprintf(path, sizeof(path), "app/views/%s/edit.html", resource_plural) < 0) return -1;
+    if (snprintf(path, sizeof(path), "app/views/%s/edit.chtml", resource_plural) < 0) return -1;
     if (write_template_file(path, "<h1>Edit</h1>\n<form method=\"POST\" action=\"\">\n  <input type=\"hidden\" name=\"_method\" value=\"PUT\" />\n  <button type=\"submit\">Update</button>\n</form>\n") != 0) return -1;
 
     return 0;
@@ -2276,20 +2359,8 @@ static const char *attr_sql_type(const char *lowercase_type) {
 }
 
 static int write_default_application_layout_if_missing(void) {
-    static const char *path = "app/views/layouts/application.html";
+    static const char *path = "app/views/layouts/application.chtml";
     FILE *f;
-    static const char *content =
-        "<!DOCTYPE html>\n"
-        "<html lang=\"en\">\n"
-        "<head>\n"
-        "  <meta charset=\"UTF-8\" />\n"
-        "  <title>Cortex App</title>\n"
-        "  <link rel=\"stylesheet\" href=\"/assets/stylesheets/application.css\" />\n"
-        "</head>\n"
-        "<body>\n"
-        "{{yield}}\n"
-        "</body>\n"
-        "</html>\n";
 
     f = fopen(path, "r");
     if (f) {
@@ -2297,7 +2368,7 @@ static int write_default_application_layout_if_missing(void) {
         return 0;
     }
     printf("forge_scaffold: generating layout at '%s'\n", path);
-    return write_template_file(path, content);
+    return write_template_file(path, FORGE_APPLICATION_LAYOUT_CHTML);
 }
 
 static int write_scaffold_sql_migration(const char *table_name, int attr_count, const char **attributes) {
@@ -2524,7 +2595,7 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
         char view_buf[4096];
         size_t view_len = 0;
         if (use_react) {
-            if (snprintf(path, sizeof(path), "%s/index.html", views_dir) < 0) return -1;
+            if (snprintf(path, sizeof(path), "%s/index.chtml", views_dir) < 0) return -1;
             if (snprintf(view_buf, sizeof(view_buf),
                          "<div data-react-component=\"%sIndexPage\" data-react-props='{\"title\":\"%s\",\"newPath\":\"/%s/new\",\"indexJsonPath\":\"/%s.json\"}'>\n"
                          "  <h1>%s</h1>\n"
@@ -2535,7 +2606,7 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
                          type_name, resource_plural, type_name) < 0) return -1;
             if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold react index"); return -1; }
 
-            if (snprintf(path, sizeof(path), "%s/show.html", views_dir) < 0) return -1;
+            if (snprintf(path, sizeof(path), "%s/show.chtml", views_dir) < 0) return -1;
             if (snprintf(view_buf, sizeof(view_buf),
                          "<div data-react-component=\"%sShowPage\" data-react-props='{\"title\":\"%s\"}'>\n"
                          "  <h1>%s</h1>\n"
@@ -2545,7 +2616,7 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
                          resource_plural, type_name, type_name, resource_plural) < 0) return -1;
             if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold react show"); return -1; }
 
-            if (snprintf(path, sizeof(path), "%s/new.html", views_dir) < 0) return -1;
+            if (snprintf(path, sizeof(path), "%s/new.chtml", views_dir) < 0) return -1;
             view_len = (size_t)snprintf(view_buf, sizeof(view_buf),
                                         "<div data-react-component=\"%sFormPage\" data-react-props='{\"title\":\"New %s\",\"mode\":\"new\"}'>\n"
                                         "<h1>New %s</h1>\n"
@@ -2570,7 +2641,7 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
             if (view_len >= sizeof(view_buf)) return -1;
             if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold react new"); return -1; }
 
-            if (snprintf(path, sizeof(path), "%s/edit.html", views_dir) < 0) return -1;
+            if (snprintf(path, sizeof(path), "%s/edit.chtml", views_dir) < 0) return -1;
             view_len = (size_t)snprintf(view_buf, sizeof(view_buf),
                                         "<div data-react-component=\"%sFormPage\" data-react-props='{\"title\":\"Edit %s\",\"mode\":\"edit\"}'>\n"
                                         "<h1>Edit %s</h1>\n"
@@ -2596,21 +2667,21 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
             if (view_len >= sizeof(view_buf)) return -1;
             if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold react edit"); return -1; }
         } else {
-            if (snprintf(path, sizeof(path), "%s/index.html", views_dir) < 0) return -1;
+            if (snprintf(path, sizeof(path), "%s/index.chtml", views_dir) < 0) return -1;
             if (write_template_file(path,
-                                    "<!-- Listing HTML is built in app/controllers/ — see *_index() (SQLite). -->\n") != 0) {
+                                    "<%# Listing HTML is built in app/controllers/ — see *_index() (SQLite). %>\n") != 0) {
                 perror("forge_scaffold index");
                 return -1;
             }
 
-            if (snprintf(path, sizeof(path), "%s/show.html", views_dir) < 0) return -1;
+            if (snprintf(path, sizeof(path), "%s/show.chtml", views_dir) < 0) return -1;
             if (write_template_file(path,
-                                    "<!-- Show HTML is built in app/controllers/ — see *_show() (SQLite). -->\n") != 0) {
+                                    "<%# Show HTML is built in app/controllers/ — see *_show() (SQLite). %>\n") != 0) {
                 perror("forge_scaffold show");
                 return -1;
             }
 
-            if (snprintf(path, sizeof(path), "%s/new.html", views_dir) < 0) return -1;
+            if (snprintf(path, sizeof(path), "%s/new.chtml", views_dir) < 0) return -1;
             view_len = (size_t)snprintf(view_buf, sizeof(view_buf),
                                         "<h1>New %s</h1>\n"
                                         "<form method=\"POST\" action=\"/%s\" data-controller=\"%s\" data-%s-target=\"form\" data-action=\"submit->%s#submit\">\n",
@@ -2633,7 +2704,7 @@ int forge_generate_scaffold(const char *resource_name, int attr_count, const cha
             if (view_len >= sizeof(view_buf)) return -1;
             if (write_template_file(path, view_buf) != 0) { perror("forge_scaffold new"); return -1; }
 
-            if (snprintf(path, sizeof(path), "%s/edit.html", views_dir) < 0) return -1;
+            if (snprintf(path, sizeof(path), "%s/edit.chtml", views_dir) < 0) return -1;
             view_len = (size_t)snprintf(view_buf, sizeof(view_buf),
                                         "<h1>Edit %s</h1>\n"
                                         "<form method=\"POST\" action=\"/%s/1\" data-controller=\"%s\" data-%s-target=\"form\" data-action=\"submit->%s#submit\">\n",
@@ -2763,17 +2834,47 @@ int forge_new_project(const char *project_name) {
     const char *makefile_content =
         "CC := gcc\n"
         "CORTEX_ROOT ?= ..\n"
+        "CHTML_COMPILE := $(CORTEX_ROOT)/build/chtml_compile\n"
+        "CHTML_GEN_DIR := build/chtml\n"
+        "CHTML_SRCS := $(shell find app/views -name '*.chtml' 2>/dev/null | LC_ALL=C sort)\n"
+        "CHTML_GENS := $(patsubst %.chtml,$(CHTML_GEN_DIR)/%.chtml.c,$(CHTML_SRCS))\n"
+        "CHTML_OBJS := $(CHTML_GENS:.c=.o)\n"
         "CFLAGS := -Wall -Wextra -std=c11 -I. -I$(CORTEX_ROOT) -I$(CORTEX_ROOT)/core -I$(CORTEX_ROOT)/action -I$(CORTEX_ROOT)/config\n"
-        "APP_SRCS := main.c config/routes.c $(wildcard app/controllers/*.c) $(wildcard app/models/*.c) $(wildcard app/neural/*.c) $(wildcard app/neural/*/*.c)\n\n"
+        "APP_SRCS := main.c config/routes.c $(wildcard app/controllers/*.c) $(wildcard app/models/*.c) $(wildcard app/neural/*.c) $(wildcard app/neural/*/*.c)\n"
+        "APP_OBJS := $(APP_SRCS:.c=.o)\n\n"
+        "define chtml_function_name\n"
+        "view_$(subst /,_,$(patsubst app/views/%.chtml,%,$(1)))\n"
+        "endef\n"
+        "define chtml_view_name\n"
+        "$(patsubst app/views/%.chtml,%,$(1))\n"
+        "endef\n\n"
         "# Link libpq when available so `-lcortex` resolves PQ* symbols if libcortex.a was built with PostgreSQL.\n"
         "HAVE_PG := $(shell pkg-config --exists libpq 2>/dev/null && echo yes)\n"
         "ifeq ($(HAVE_PG),yes)\n"
         "  PG_LDFLAGS := $(shell pkg-config --libs libpq)\n"
         "endif\n\n"
-        "cortex_app: $(APP_SRCS)\n"
-        "\t$(CC) $(CFLAGS) $(APP_SRCS) -L$(CORTEX_ROOT) -lcortex -lm $(PG_LDFLAGS) -o cortex_app\n\n"
-        ".PHONY: all clean server dev assets-build\n"
-        "all: cortex_app\n"
+        ".PHONY: all clean server dev assets-build views\n"
+        "all: $(CHTML_COMPILE) $(CHTML_GENS) cortex_app\n\n"
+        "views: $(CHTML_COMPILE) $(CHTML_GENS)\n"
+        "\t@count=0; for f in $(CHTML_SRCS); do count=$$((count + 1)); done; \\\n"
+        "\tprintf \"[chtml] %%d template(s) compilados\\n\" \"$$count\"\n\n"
+        "$(CHTML_COMPILE): $(CORTEX_ROOT)/forge/chtml_compile.c\n"
+        "\t@mkdir -p $(dir $@)\n"
+        "\t$(CC) -Wall -Wextra -std=c11 -I$(CORTEX_ROOT)/action -o $@ $(CORTEX_ROOT)/forge/chtml_compile.c\n\n"
+        "$(CHTML_GEN_DIR)/%.chtml.c: %.chtml $(CHTML_COMPILE)\n"
+        "\t@mkdir -p $(dir $@)\n"
+        "\t@echo \"[chtml] compilando $<\"\n"
+        "\t@$(CHTML_COMPILE) $< $@ $(call chtml_function_name,$<) $(call chtml_view_name,$<)\n\n"
+        "define COMPILE_CHTML_OBJ\n"
+        "$(1): $(2)\n"
+        "\t@mkdir -p $(dir $(1))\n"
+        "\t$(CC) $(CFLAGS) -c $(2) -o $(1)\n"
+        "endef\n"
+        "$(foreach _chtml_src,$(CHTML_GENS),$(eval $(call COMPILE_CHTML_OBJ,$(_chtml_src:.c=.o),$(_chtml_src))))\n\n"
+        "%.o: %.c\n"
+        "\t$(CC) $(CFLAGS) -c $< -o $@\n\n"
+        "cortex_app: $(APP_OBJS) $(CHTML_OBJS)\n"
+        "\t$(CC) $(CFLAGS) $(APP_OBJS) $(CHTML_OBJS) -L$(CORTEX_ROOT) -lcortex -lm $(PG_LDFLAGS) -o $@\n\n"
         "server: cortex_app assets-build\n"
         "\t./cortex_app\n"
         "assets-build:\n"
@@ -2781,7 +2882,8 @@ int forge_new_project(const char *project_name) {
         "dev:\n"
         "\t$(CORTEX_ROOT)/cortex dev\n"
         "clean:\n"
-        "\trm -f cortex_app\n";
+        "\trm -f cortex_app $(APP_OBJS) $(CHTML_OBJS)\n"
+        "\trm -rf $(CHTML_GEN_DIR)\n";
     const char *routes_content =
         "#include \"config/routes.h\"\n"
         "#include \"../action/action_request.h\"\n"
@@ -2806,137 +2908,26 @@ int forge_new_project(const char *project_name) {
         "void register_routes(ActionRouter *router) {\n"
         "    app_register_routes(router);\n"
         "}\n";
-    const char *home_controller_content =
-        "#include \"action_controller.h\"\n"
-        "#include \"action_view.h\"\n\n"
+    const char *home_controller_tail =
         "void home_index(ActionRequest *req, ActionResponse *res) {\n"
+        "    CxContext cx;\n"
         "    (void)req;\n"
-        "    render_view(res, \"home/index\");\n"
+        "    cx_init(&cx);\n"
+        "    cx_set(&cx, \"page_title\", \"Home\");\n"
+        "    cx_set(&cx, \"app_name\", \"Cortex App\");\n"
+        "    (void)forge_render_chtml(res, \"home/index\", &cx);\n"
         "}\n";
-    const char *application_layout_content =
-        "<!DOCTYPE html>\n"
-        "<html lang=\"en\">\n"
-        "<head>\n"
-        "  <meta charset=\"UTF-8\" />\n"
-        "  <title>Cortex App</title>\n"
-        "  <link rel=\"stylesheet\" href=\"/assets/stylesheets/application.css\" />\n"
-        "</head>\n"
-        "<body>\n"
-        "{{yield}}\n"
-        "</body>\n"
-        "</html>\n";
     const char *home_view_content =
-        "<!DOCTYPE html>\n"
-        "<html lang=\"en\">\n"
-        "<head>\n"
-        "  <meta charset=\"UTF-8\" />\n"
-        "  <title>Cortex — Welcome</title>\n"
-        "  <link rel=\"stylesheet\" href=\"/assets/stylesheets/application.css\" />\n"
-        "  <style>\n"
-        "    body {\n"
-        "      margin: 0;\n"
-        "      padding: 0;\n"
-        "      background: #0d1117;\n"
-        "      color: #c9d1d9;\n"
-        "      font-family: \"Courier New\", monospace;\n"
-        "      display: flex;\n"
-        "      align-items: center;\n"
-        "      justify-content: center;\n"
-        "      height: 100vh;\n"
-        "    }\n"
+        "<div class=\"container\">\n"
+        "  <h1>Cortex</h1>\n"
+        "  <p class=\"subtitle\">Rails-inspired Web Framework in <span class=\"highlight\">C</span></p>\n"
+        "  <div class=\"box\">\n"
+        "Welcome to your new Cortex application.\n"
         "\n"
-        "    .container {\n"
-        "      text-align: center;\n"
-        "      max-width: 700px;\n"
-        "      padding: 40px;\n"
-        "      border: 1px solid #30363d;\n"
-        "      border-radius: 12px;\n"
-        "      background: #161b22;\n"
-        "      box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);\n"
-        "    }\n"
-        "\n"
-        "    h1 {\n"
-        "      font-size: 42px;\n"
-        "      margin-bottom: 10px;\n"
-        "      color: #58a6ff;\n"
-        "    }\n"
-        "\n"
-        "    .subtitle {\n"
-        "      font-size: 16px;\n"
-        "      color: #8b949e;\n"
-        "      margin-bottom: 30px;\n"
-        "    }\n"
-        "\n"
-        "    .highlight {\n"
-        "      color: #3fb950;\n"
-        "    }\n"
-        "\n"
-        "    .box {\n"
-        "      background: #0d1117;\n"
-        "      border: 1px solid #30363d;\n"
-        "      padding: 15px;\n"
-        "      border-radius: 8px;\n"
-        "      font-size: 14px;\n"
-        "      margin: 20px 0;\n"
-        "      text-align: left;\n"
-        "      white-space: pre-line;\n"
-        "    }\n"
-        "\n"
-        "    .footer {\n"
-        "      margin-top: 25px;\n"
-        "      font-size: 13px;\n"
-        "      color: #6e7681;\n"
-        "    }\n"
-        "\n"
-        "    .badge {\n"
-        "      display: inline-block;\n"
-        "      margin: 5px;\n"
-        "      padding: 6px 10px;\n"
-        "      border: 1px solid #30363d;\n"
-        "      border-radius: 6px;\n"
-        "      font-size: 12px;\n"
-        "      background: #21262d;\n"
-        "    }\n"
-        "  </style>\n"
-        "</head>\n"
-        "<body>\n"
-        "  <div class=\"container\">\n"
-        "    <h1>⚡ Cortex</h1>\n"
-        "    <div class=\"subtitle\">\n"
-        "      Rails-inspired Web Framework in <span class=\"highlight\">C</span>\n"
-        "    </div>\n"
-        "\n"
-        "    <div>\n"
-        "      <span class=\"badge\">C Standard: {{C_STANDARD}}</span>\n"
-        "      <span class=\"badge\">Cortex v{{CORTEX_VERSION}}</span>\n"
-        "    </div>\n"
-        "\n"
-        "    <div class=\"box\">\n"
-        "Welcome to Cortex.\n"
-        "\n"
-        "You are running a Rails-like MVC framework built in pure C.\n"
-        "\n"
-        "✔ Convention over configuration  \n"
-        "✔ Generators (scaffold, models, controllers)  \n"
-        "✔ MVC architecture  \n"
-        "✔ Native AI (Neural layer)  \n"
-        "✔ High performance, low-level control  \n"
-        "\n"
-        "Start building:\n"
-        "\n"
-        "$ cortex generate scaffold Post title:string body:text\n"
-        "$ cortex db:migrate\n"
-        "$ cortex server\n"
-        "    </div>\n"
-        "\n"
-        "    <div class=\"footer\">\n"
-        "      Built with low-level power ⚙️ — inspired by Rails, engineered in C.\n"
-        "      <br/>\n"
-        "      <a href=\"https://github.com/sergiomaia/cortex\" target=\"_blank\" rel=\"noopener noreferrer\">GitHub Repository</a>\n"
-        "    </div>\n"
+        "Edit <code>app/views/home/index.chtml</code> to customize this page.\n"
         "  </div>\n"
-        "</body>\n"
-        "</html>\n";
+        "</div>\n";
+    const char *application_layout_content = FORGE_APPLICATION_LAYOUT_CHTML;
     const char *project_marker_content =
         "cortex_project=1\n";
     const char *runtime_js_content =
@@ -3129,16 +3120,32 @@ int forge_new_project(const char *project_name) {
     if (snprintf(path, sizeof(path), "%s/app/controllers/home_controller.c", project_name) < 0) {
         return -1;
     }
-    if (write_template_file(path, home_controller_content) != 0) {
-        return -1;
+    {
+        char home_controller_buf[4096];
+        int hn = snprintf(home_controller_buf, sizeof(home_controller_buf),
+                            "#include \"action_controller.h\"\n"
+                            "#include \"action_view.h\"\n"
+                            "#include \"cx_context.h\"\n"
+                            "#include <stdlib.h>\n"
+                            "#include <string.h>\n\n"
+                            "%s"
+                            "%s",
+                            FORGE_CHTML_RENDER_HELPER,
+                            home_controller_tail);
+        if (hn < 0 || (size_t)hn >= sizeof(home_controller_buf)) {
+            return -1;
+        }
+        if (write_template_file(path, home_controller_buf) != 0) {
+            return -1;
+        }
     }
-    if (snprintf(path, sizeof(path), "%s/app/views/home/index.html", project_name) < 0) {
+    if (snprintf(path, sizeof(path), "%s/app/views/home/index.chtml", project_name) < 0) {
         return -1;
     }
     if (write_template_file(path, home_view_content) != 0) {
         return -1;
     }
-    if (snprintf(path, sizeof(path), "%s/app/views/layouts/application.html", project_name) < 0) {
+    if (snprintf(path, sizeof(path), "%s/app/views/layouts/application.chtml", project_name) < 0) {
         return -1;
     }
     if (write_template_file(path, application_layout_content) != 0) {

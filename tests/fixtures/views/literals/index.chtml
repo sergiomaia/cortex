@@ -1,0 +1,1 @@
+<p>100% &lt;tag&gt; <%= cx_get(cx, "x") %> end</p>

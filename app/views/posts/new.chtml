@@ -1,0 +1,6 @@
+<h1>Novo post</h1>
+<form method="post" action="/posts">
+  <label>Título <input type="text" name="title" /></label>
+  <label>Corpo <textarea name="body"></textarea></label>
+  <button type="submit">Criar</button>
+</form>
