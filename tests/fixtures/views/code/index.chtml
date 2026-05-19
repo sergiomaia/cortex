@@ -1,0 +1,5 @@
+<% if (cx_get_int(cx, "n") > 0) { %>
+  <p>positive</p>
+<% } else { %>
+  <p>zero</p>
+<% } %>

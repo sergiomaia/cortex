@@ -203,10 +203,10 @@ void test_forge_generate_model_plural_input_creates_singular_model(void) {
 void test_forge_generate_resource_creates_controller_and_views(void) {
    const char *name = "specpost";
     const char *controller_path = "app/controllers/specposts_controller.c";
-    const char *index_view_path = "app/views/specposts/index.html";
-    const char *show_view_path = "app/views/specposts/show.html";
-    const char *new_view_path = "app/views/specposts/new.html";
-    const char *edit_view_path = "app/views/specposts/edit.html";
+    const char *index_view_path = "app/views/specposts/index.chtml";
+    const char *show_view_path = "app/views/specposts/show.chtml";
+    const char *new_view_path = "app/views/specposts/new.chtml";
+    const char *edit_view_path = "app/views/specposts/edit.chtml";
     const char *model_path = "app/models/specpost.c";
     const char *routes_path = "config/routes.c";
     int had_routes_file = file_exists(routes_path);
@@ -251,15 +251,15 @@ void test_forge_generate_resource_creates_controller_and_views(void) {
 void test_forge_generate_resource_plural_input_keeps_rails_naming(void) {
    const char *name = "Otters";
    const char *controller_path = "app/controllers/otters_controller.c";
-   const char *index_view_path = "app/views/otters/index.html";
-   const char *show_view_path = "app/views/otters/show.html";
-   const char *new_view_path = "app/views/otters/new.html";
-   const char *edit_view_path = "app/views/otters/edit.html";
+   const char *index_view_path = "app/views/otters/index.chtml";
+   const char *show_view_path = "app/views/otters/show.chtml";
+   const char *new_view_path = "app/views/otters/new.chtml";
+   const char *edit_view_path = "app/views/otters/edit.chtml";
    const char *wrong_controller_path = "app/controllers/otterss_controller.c";
-   const char *wrong_view_dir_index_path = "app/views/otterss/index.html";
-   const char *wrong_view_dir_show_path = "app/views/otterss/show.html";
-   const char *wrong_view_dir_new_path = "app/views/otterss/new.html";
-   const char *wrong_view_dir_edit_path = "app/views/otterss/edit.html";
+   const char *wrong_view_dir_index_path = "app/views/otterss/index.chtml";
+   const char *wrong_view_dir_show_path = "app/views/otterss/show.chtml";
+   const char *wrong_view_dir_new_path = "app/views/otterss/new.chtml";
+   const char *wrong_view_dir_edit_path = "app/views/otterss/edit.chtml";
    const char *model_path = "app/models/otter.c";
    const char *wrong_model_path = "app/models/otters.c";
    const char *routes_path = "config/routes.c";
@@ -498,11 +498,11 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     const char *neural_path = "app/neural/specpost_neural_model.c";
     const char *controller_path = "app/controllers/specposts_controller.c";
     const char *routes_path = "config/routes.c";
-    const char *view_index_path = "app/views/specposts/index.html";
-    const char *view_show_path = "app/views/specposts/show.html";
-    const char *view_new_path = "app/views/specposts/new.html";
-    const char *view_edit_path = "app/views/specposts/edit.html";
-    const char *layout_path = "app/views/layouts/application.html";
+    const char *view_index_path = "app/views/specposts/index.chtml";
+    const char *view_show_path = "app/views/specposts/show.chtml";
+    const char *view_new_path = "app/views/specposts/new.chtml";
+    const char *view_edit_path = "app/views/specposts/edit.chtml";
+    const char *layout_path = "app/views/layouts/application.chtml";
     const char *react_entry_path = "app/javascript/application.jsx";
     const char *react_registry_path = "app/javascript/resources/index.jsx";
     const char *react_resource_path = "app/javascript/resources/specposts/index.jsx";
@@ -545,7 +545,7 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_exists(react_registry_path));
     ASSERT_TRUE(file_exists(react_resource_path));
 
-    ASSERT_TRUE(file_contains(layout_path, "{{yield}}"));
+    ASSERT_TRUE(file_contains(layout_path, "cx_yield(cx)"));
     ASSERT_TRUE(any_migration_file_contains("CREATE TABLE specposts"));
     ASSERT_TRUE(any_migration_file_contains("created_at"));
     ASSERT_TRUE(file_contains(view_index_path, "data-react-component=\"specpostsIndexPage\""));
@@ -555,8 +555,9 @@ void test_forge_scaffold_creates_model_controller_routes_fields_and_route(void) 
     ASSERT_TRUE(file_contains(view_new_path, "<form method=\"POST\" action=\"/specposts\">"));
     ASSERT_TRUE(file_contains(view_edit_path, "data-react-component=\"specpostsFormPage\""));
     ASSERT_TRUE(file_contains(view_edit_path, "<form method=\"POST\" action=\"/specposts/1\">"));
-    ASSERT_TRUE(file_contains(controller_path, "render_view(res, \"specposts/index\")"));
-    ASSERT_TRUE(file_contains(controller_path, "render_view(res, \"specposts/show\")"));
+    ASSERT_TRUE(file_contains(controller_path, "forge_render_chtml(res, \"specposts/index\""));
+    ASSERT_TRUE(file_contains(controller_path, "forge_render_chtml(res, \"specposts/show\""));
+    ASSERT_TRUE(file_contains(controller_path, "CxContext"));
     ASSERT_TRUE(file_contains(controller_path, "FROM specposts ORDER BY id ASC"));
     ASSERT_TRUE(file_contains(controller_path, "action_response_set_content_type(res, \"application/json\")"));
     ASSERT_TRUE(file_contains(controller_path, "INSERT INTO specposts"));
@@ -623,13 +624,13 @@ void test_forge_scaffold_plural_input_uses_plural_controller_and_singular_model(
     const char *neural_path = "app/neural/zebra_neural_model.c";
     const char *controller_path = "app/controllers/zebras_controller.c";
     const char *js_controller_path = "app/javascript/controllers/zebra_controller.js";
-    const char *view_index_path = "app/views/zebras/index.html";
-    const char *view_show_path = "app/views/zebras/show.html";
-    const char *view_new_path = "app/views/zebras/new.html";
-    const char *view_edit_path = "app/views/zebras/edit.html";
+    const char *view_index_path = "app/views/zebras/index.chtml";
+    const char *view_show_path = "app/views/zebras/show.chtml";
+    const char *view_new_path = "app/views/zebras/new.chtml";
+    const char *view_edit_path = "app/views/zebras/edit.chtml";
     const char *wrong_model_path = "app/models/zebras.c";
     const char *wrong_controller_path = "app/controllers/zebrass_controller.c";
-    const char *wrong_view_path = "app/views/zebrass/index.html";
+    const char *wrong_view_path = "app/views/zebrass/index.chtml";
     const char *routes_path = "config/routes.c";
     int had_routes_file = file_exists(routes_path);
     char *routes_backup = NULL;

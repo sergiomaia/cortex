@@ -17,6 +17,9 @@ void run_action_router_tests(void);
 void run_action_controller_tests(void);
 void run_action_response_tests(void);
 void run_action_error_tests(void);
+void run_cx_context_tests(void);
+void run_action_chtml_tests(void);
+void run_chtml_compile_tests(void);
 void run_guard_tests(void);
 void run_flow_jobs_tests(void);
 void run_neural_client_tests(void);
@@ -43,6 +46,9 @@ int main(void) {
     run_action_controller_tests();
     run_action_response_tests();
     run_action_error_tests();
+    run_cx_context_tests();
+    run_action_chtml_tests();
+    run_chtml_compile_tests();
 
     run_guard_tests();
     run_db_pool_tests();

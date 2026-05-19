@@ -2,12 +2,31 @@
 #define ACTION_VIEW_H
 
 #include "action_response.h"
+#include "cx_context.h"
 
 typedef struct {
     const char *template_name;
 } ActionView;
 
-void action_view_render(ActionView *view, const char *data, char *buffer, int buffer_size);
+typedef void (*ViewFn)(CxContext *cx);
+
+typedef struct {
+    const char *name;
+    ViewFn      fn;
+} ViewEntry;
+
+#define ACTION_VIEW_REGISTRY_MAX 256
+
+void action_view_register(const char *name, ViewFn fn);
+
+/* Render a compiled .chtml view (and optional layout) into out. Returns 0 on success. */
+int action_view_render(const char *name, CxContext *cx, char *out, int outsz);
+
+#define CORTEX_VIEW(name_str, fn_name) \
+    static void __attribute__((constructor, used)) \
+    _reg_##fn_name(void) { \
+        action_view_register(name_str, fn_name); \
+    }
 
 /* High-level helper: render "home/index" by loading
  * "app/views/home/index.html" and writing an HTML response.
@@ -22,4 +41,3 @@ char *action_view_escape_html(const char *input);
 void render_html(ActionResponse *res, char *inner_html);
 
 #endif /* ACTION_VIEW_H */
-

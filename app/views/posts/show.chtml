@@ -1,0 +1,7 @@
+<article>
+  <h1><%= cx_get(cx, "post_title") %></h1>
+  <p class="meta">por <%= cx_get(cx, "post_author") %> em <%= cx_get(cx, "post_date") %></p>
+  <div class="body">
+    <%== cx_get(cx, "post_body") %>
+  </div>
+</article>

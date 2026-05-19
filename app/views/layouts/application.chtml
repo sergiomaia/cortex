@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title><%= cx_get(cx, "page_title") %> — <%= cx_get(cx, "app_name") %></title>
+  <link rel="stylesheet" href="/assets/stylesheets/application.css" />
+</head>
+<body>
+  <%== cx_yield(cx) %>
+</body>
+</html>

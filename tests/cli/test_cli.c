@@ -562,10 +562,10 @@ void test_cli_dispatch_generate_controller_executes_handler(void) {
 
 void test_cli_dispatch_generate_resource_executes_handler(void) {
     const char *controller_path = "app/controllers/specclis_controller.c";
-    const char *index_view_path = "app/views/specclis/index.html";
-    const char *show_view_path = "app/views/specclis/show.html";
-    const char *new_view_path = "app/views/specclis/new.html";
-    const char *edit_view_path = "app/views/specclis/edit.html";
+    const char *index_view_path = "app/views/specclis/index.chtml";
+    const char *show_view_path = "app/views/specclis/show.chtml";
+    const char *new_view_path = "app/views/specclis/new.chtml";
+    const char *edit_view_path = "app/views/specclis/edit.chtml";
     const char *routes_path = "config/routes.c";
     CliParsed parsed;
     int had_routes_file = file_exists(routes_path);
@@ -817,9 +817,11 @@ void test_forge_new_creates_project_directory(void) {
     ASSERT_TRUE(file_exists(path));
     snprintf(path, sizeof(path), "%s/app/javascript/application.jsx", project_name);
     ASSERT_TRUE(file_exists(path));
-    snprintf(path, sizeof(path), "%s/app/views/layouts/application.html", project_name);
+    snprintf(path, sizeof(path), "%s/app/views/layouts/application.chtml", project_name);
     ASSERT_TRUE(file_exists(path));
-    ASSERT_TRUE(file_contains(path, "/assets/stylesheets/application.css"));
+    ASSERT_TRUE(file_contains(path, "cx_yield(cx)"));
+    snprintf(path, sizeof(path), "%s/app/views/home/index.chtml", project_name);
+    ASSERT_TRUE(file_exists(path));
     snprintf(path, sizeof(path), "%s/app/assets/stylesheets/application.css", project_name);
     ASSERT_TRUE(file_exists(path));
     ASSERT_TRUE(file_contains(path, "/assets/stylesheets/application.css"));
@@ -864,6 +866,7 @@ void test_forge_new_creates_main_c_and_makefile(void) {
     ASSERT_TRUE(file_exists(path));
     snprintf(path, sizeof(path), "%s/Makefile", project_name);
     ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "CHTML_COMPILE"));
     ASSERT_TRUE(file_contains(path, "server: cortex_app assets-build"));
     ASSERT_TRUE(file_contains(path, "PG_LDFLAGS"));
     ASSERT_TRUE(file_contains(path, "$(CORTEX_ROOT)/cortex assets:build"));
@@ -892,13 +895,19 @@ void test_cli_dispatch_new_creates_project(void) {
     ASSERT_TRUE(file_exists(path));
     snprintf(path, sizeof(path), "%s/Makefile", project_name);
     ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "CHTML_COMPILE"));
     snprintf(path, sizeof(path), "%s/package.json", project_name);
     ASSERT_TRUE(file_exists(path));
     snprintf(path, sizeof(path), "%s/app/javascript/application.jsx", project_name);
     ASSERT_TRUE(file_exists(path));
-    snprintf(path, sizeof(path), "%s/app/views/layouts/application.html", project_name);
+    snprintf(path, sizeof(path), "%s/app/views/layouts/application.chtml", project_name);
     ASSERT_TRUE(file_exists(path));
-    ASSERT_TRUE(file_contains(path, "/assets/stylesheets/application.css"));
+    ASSERT_TRUE(file_contains(path, "cx_yield(cx)"));
+    snprintf(path, sizeof(path), "%s/app/views/home/index.chtml", project_name);
+    ASSERT_TRUE(file_exists(path));
+    snprintf(path, sizeof(path), "%s/app/controllers/home_controller.c", project_name);
+    ASSERT_TRUE(file_exists(path));
+    ASSERT_TRUE(file_contains(path, "forge_render_chtml"));
     snprintf(path, sizeof(path), "%s/app/assets/stylesheets/application.css", project_name);
     ASSERT_TRUE(file_exists(path));
     snprintf(path, sizeof(path), "%s/app/assets/images", project_name);

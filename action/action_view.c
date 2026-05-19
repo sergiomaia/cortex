@@ -11,6 +11,151 @@
 #define CORTEX_VERSION "0.0.0"
 #endif
 
+/* ── Compiled .chtml view registry ───────────────────────────────────── */
+
+static ViewEntry g_view_registry[ACTION_VIEW_REGISTRY_MAX];
+static int g_view_registry_count = 0;
+
+static int action_view_copy_out(const char *src, char *out, int outsz) {
+    int n;
+
+    if (!out || outsz <= 0) {
+        return -1;
+    }
+    if (!src) {
+        out[0] = '\0';
+        return -1;
+    }
+
+    n = (int)strlen(src);
+    if (n >= outsz) {
+        memcpy(out, src, (size_t)(outsz - 1));
+        out[outsz - 1] = '\0';
+        return -1;
+    }
+
+    memcpy(out, src, (size_t)n + 1);
+    return 0;
+}
+
+void action_view_register(const char *name, ViewFn fn) {
+    int i;
+
+    if (!name || name[0] == '\0' || !fn) {
+        return;
+    }
+
+    for (i = 0; i < g_view_registry_count; i++) {
+        if (strcmp(g_view_registry[i].name, name) == 0) {
+            g_view_registry[i].fn = fn;
+            return;
+        }
+    }
+
+    if (g_view_registry_count >= ACTION_VIEW_REGISTRY_MAX) {
+        return;
+    }
+
+    g_view_registry[g_view_registry_count].name = name;
+    g_view_registry[g_view_registry_count].fn = fn;
+    g_view_registry_count++;
+}
+
+static ViewFn action_view_lookup(const char *name) {
+    int i;
+
+    if (!name) {
+        return NULL;
+    }
+
+    for (i = 0; i < g_view_registry_count; i++) {
+        if (strcmp(g_view_registry[i].name, name) == 0) {
+            return g_view_registry[i].fn;
+        }
+    }
+    return NULL;
+}
+
+static int action_view_save_yield(CxContext *cx) {
+    if (!cx) {
+        return -1;
+    }
+    if (cx->buf_len < 0 || cx->buf_len >= CX_BUF_SIZE) {
+        return -1;
+    }
+
+    memcpy(cx->yield_buf, cx->buf, (size_t)cx->buf_len);
+    cx->yield_len = cx->buf_len;
+    cx->yield_buf[cx->yield_len] = '\0';
+
+    cx->buf_len = 0;
+    cx->buf[0] = '\0';
+    return 0;
+}
+
+int action_view_render(const char *name, CxContext *cx, char *out, int outsz) {
+    ViewFn view_fn;
+    ViewFn layout_fn;
+    const char *layout_name;
+    char layout_key[128];
+    const char *result;
+    int copy_rc;
+
+    if (!name || !cx || !out || outsz <= 0) {
+        if (out && outsz > 0) {
+            out[0] = '\0';
+        }
+        return -1;
+    }
+
+    view_fn = action_view_lookup(name);
+    if (!view_fn) {
+        out[0] = '\0';
+        return -2;
+    }
+
+    cx->buf_len = 0;
+    cx->buf[0] = '\0';
+    view_fn(cx);
+
+    if (cx->buf_len < 0 || cx->buf_len >= CX_BUF_SIZE) {
+        out[0] = '\0';
+        return -3;
+    }
+
+    layout_name = cx->layout;
+    if (!layout_name || layout_name[0] == '\0') {
+        return action_view_copy_out(cx->buf, out, outsz);
+    }
+
+    if (action_view_save_yield(cx) != 0) {
+        out[0] = '\0';
+        return -3;
+    }
+
+    if (snprintf(layout_key, sizeof(layout_key), "layouts/%s", layout_name) < 0) {
+        out[0] = '\0';
+        return -4;
+    }
+
+    layout_fn = action_view_lookup(layout_key);
+    if (!layout_fn) {
+        out[0] = '\0';
+        return -5;
+    }
+
+    layout_fn(cx);
+
+    if (cx->buf_len < 0 || cx->buf_len >= CX_BUF_SIZE) {
+        out[0] = '\0';
+        return -3;
+    }
+
+    result = cx->buf;
+    copy_rc = action_view_copy_out(result, out, outsz);
+    return copy_rc == 0 ? 0 : -6;
+}
+
 /* If app/views/layouts/application.html exists, replace {{yield}} with inner HTML. */
 static char *apply_layout_if_present(const char *inner_html) {
     static const char path[] = "app/views/layouts/application.html";
@@ -332,15 +477,6 @@ void render_html(ActionResponse *res, char *inner_html) {
     with_assets = action_assets_inject_javascript(buf);
     action_response_set(res, 200, with_assets ? with_assets : buf);
     action_response_set_content_type(res, "text/html");
-}
-
-void action_view_render(ActionView *view, const char *data, char *buffer, int buffer_size) {
-    (void)view;
-    (void)data;
-    if (!buffer || buffer_size <= 0) {
-        return;
-    }
-    buffer[0] = '\0';
 }
 
 void render_view(ActionResponse *res, const char *template_name) {

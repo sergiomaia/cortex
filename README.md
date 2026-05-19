@@ -48,11 +48,219 @@ When you generate a scaffold, Cortex creates a corresponding model under
 The **View layer** is composed of templates responsible for producing the
 representation returned to the client.
 
-In Cortex, views are plain HTML templates located under `app/views/...` and
-rendered by `Action View` helpers.
+Cortex supports two complementary view modes:
 
-For example, generated controllers call `render_view(res, "home/index")`,
-which maps to a template file like `app/views/home/index.html`.
+1. **Static HTML** (`app/views/**/*.html`) — loaded at runtime by `render_view()`
+   and `render_html()` (unchanged, backward compatible for existing apps).
+2. **Compiled templates** (`app/views/**/*.chtml`) — ERB-style syntax compiled to
+   pure C at build time (zero parsing at runtime). **Forge generators** (`cortex new`,
+   `generate scaffold`, `generate resource`) create `.chtml` views and controllers
+   that call `action_view_render()` via the generated `forge_render_chtml()` helper.
+
+New projects include a `Makefile` with `CHTML_COMPILE`, `make views`, and link rules
+for `build/chtml/**/*.chtml.c`.
+
+---
+
+## Action View — compiled `.chtml` templates
+
+### Overview
+
+`.chtml` templates use an ERB-like syntax. At **build time**, the
+`chtml_compile` tool converts each template into a C function. There is **no
+template parser at runtime** — performance is equivalent to hand-written C
+that calls `cx_write()` / `cx_write_escaped()`.
+
+```
+app/views/posts/index.chtml
+        ↓  (make / chtml_compile)
+build/chtml/app/views/posts/index.chtml.c
+        ↓  (gcc)
+view_posts_index(CxContext *cx)  +  CORTEX_VIEW("posts/index", …)
+        ↓
+action_view_render("posts/index", &cx, html, sizeof(html))
+        ↓  (optional layout)
+HTML in `out`
+```
+
+### Syntax (ERB-compatible)
+
+| Tag | Meaning |
+|-----|---------|
+| `<%= expr %>` | Evaluate C expression, **HTML-escape** output (`cx_write_escaped`) |
+| `<%== expr %>` | Evaluate C expression, **raw** output (`cx_write`) |
+| `<% stmt %>` | Emit C statement(s) (control flow, loops, etc.) |
+| `<%# comment %>` | Comment — removed at compile time |
+| Plain text | Emitted as `cx_write(cx, "…", N)` |
+
+**Example** — `app/views/posts/index.chtml`:
+
+```html
+<h1>Posts (<%= cx_get(cx, "posts_count") %>)</h1>
+
+<% if (cx_get_int(cx, "posts_count") == 0) { %>
+  <p>Nenhum post encontrado.</p>
+<% } else { %>
+  <ul>
+    <%== cx_get(cx, "posts_list") %>
+  </ul>
+<% } %>
+```
+
+Expressions must be valid **C**. Use `cx_get(cx, "key")`, `cx_get_int(cx, "key")`,
+and `cx_isset(cx, "key")` for template variables.
+
+### `CxContext` — render context
+
+Headers: `action/cx_context.h`, implementation: `action/cx_context.c`.
+
+```c
+CxContext cx;
+cx_init(&cx);
+
+cx_set(&cx, "page_title", "Posts");
+cx_set_int(&cx, "posts_count", 0);
+cx_set_fmt(&cx, "label", "item-%d", 7);
+cx_set_layout(&cx, "application");   /* default; see layouts */
+/* cx_set_layout(&cx, NULL); */      /* disable layout */
+
+char html[64 * 1024];
+if (action_view_render("posts/index", &cx, html, (int)sizeof(html)) != 0) {
+    /* handle error */
+}
+```
+
+| API | Role |
+|-----|------|
+| `cx_write` / `cx_writef` | Append literal or formatted text |
+| `cx_write_escaped` / `cx_writef_escaped` | Append with HTML escape (`& " ' < >`) |
+| `cx_set` / `cx_set_int` / `cx_set_fmt` | Template variables |
+| `cx_get` / `cx_get_int` / `cx_isset` | Read variables in templates |
+| `cx_set_layout` | Layout name (default `"application"`) or `NULL` |
+| `cx_yield` | Yield buffer content (for layouts) |
+
+Buffers are bounded (`CX_BUF_SIZE` = 256 KiB); all writes are overflow-safe and
+null-terminated.
+
+### Layouts and yield
+
+Layouts live under `app/views/layouts/*.chtml` and register as
+`layouts/<name>` (e.g. `layouts/application`).
+
+Render flow:
+
+1. Render the view into an internal buffer.
+2. Copy result to `yield_buf`, clear main buffer.
+3. If `cx->layout` is set, render `layouts/<layout>`.
+4. Layout inserts the view via `<%== cx_yield(cx) %>`.
+5. Copy final HTML to the caller's `out` buffer.
+
+**Example** — `app/views/layouts/application.chtml` (excerpt):
+
+```html
+<title><%= cx_get(cx, "page_title") %> — <%= cx_get(cx, "app_name") %></title>
+<main>
+  <%== cx_yield(cx) %>
+</main>
+```
+
+### Controller integration
+
+```c
+#include "action_view.h"
+#include "cx_context.h"
+
+void posts_index(ActionRequest *req, ActionResponse *res) {
+    CxContext cx;
+    char html[256 * 1024];
+    (void)req;
+
+    cx_init(&cx);
+    cx_set_int(&cx, "posts_count", 12);
+    cx_set(&cx, "page_title", "Posts");
+    cx_set(&cx, "app_name", "MeuApp");
+
+    if (action_view_render("posts/index", &cx, html, (int)sizeof(html)) != 0) {
+        action_response_set(res, 500, "Template render error");
+        return;
+    }
+    render_html(res, strdup(html));  /* layout + JS injection for HTTP */
+}
+```
+
+`render_view()` / `render_html()` for static `.html` files are **unchanged**.
+
+### Build integration (`Makefile`)
+
+| Target / variable | Purpose |
+|-------------------|---------|
+| `make` / `make all` | Build compiler, compile templates, link `cortex` |
+| `make views` | Compile all `app/views/**/*.chtml` only |
+| `CHTML_COMPILE` | `build/chtml_compile` |
+| Generated sources | `build/chtml/app/views/.../*.chtml.c` |
+| Generated objects | Linked into `cortex` and tests (not only `libcortex.a`) |
+
+Compiler CLI:
+
+```bash
+build/chtml_compile input.chtml output.chtml.c function_name view_name
+```
+
+Example:
+
+```bash
+build/chtml_compile app/views/posts/index.chtml \
+  build/chtml/app/views/posts/index.chtml.c \
+  view_posts_index posts/index
+```
+
+Auto-registration (each generated `.c` file ends with):
+
+```c
+CORTEX_VIEW("posts/index", view_posts_index)
+```
+
+View names mirror paths under `app/views/` (without `.chtml`). Function names:
+`view_<path_with_underscores>`.
+
+### Security and performance
+
+- **HTML escape** on `<%=` via `cx_write_escaped` (`&`, `"`, `'`, `<`, `>`).
+- **No runtime parsing** — invalid templates fail at compile time with file/line errors.
+- **No external dependencies** — compiler and runtime are C11 only.
+- **Incremental builds** — `make` recompiles only changed `.chtml` files.
+- **Static HTML still works** — no migration required for existing `.html` views.
+
+### Differences from Rails ERB
+
+| Rails ERB | Cortex `.chtml` |
+|-----------|-----------------|
+| Ruby expressions | **C expressions** |
+| Runtime interpretation | **Build-time compilation** |
+| Instance variables (`@foo`) | `cx_set` / `cx_get(cx, "foo")` |
+| `yield` in layouts | `cx_yield(cx)` |
+| `html_safe` / `raw` | `<%== ... %>` |
+
+### Troubleshooting
+
+| Symptom | Likely cause |
+|---------|----------------|
+| `action_view_render` returns `-2` | View not registered — ensure `.chtml.o` objects are linked (see Makefile) |
+| Returns `-5` | Layout missing — add `app/views/layouts/<name>.chtml` or `cx_set_layout(cx, NULL)` |
+| `chtml_compile: unclosed tag` | Missing `%>` or `<%` inside literal confused with tag — escape or split literals |
+| Truncated output | `out` buffer too small — increase size or check return `-6` |
+| Empty variable in template | Key not set — use `cx_isset` before `cx_get` |
+
+### Tests
+
+Template tests live in:
+
+- `tests/action/test_cx_context.c`
+- `tests/action/test_action_chtml.c`
+- `tests/forge/test_chtml_compile.c`
+- `tests/fixtures/views/**/*.chtml`
+
+Run: `make test`
 
 ## Controller layer
 
